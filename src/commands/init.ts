@@ -118,22 +118,26 @@ export async function initCommand(name?: string, options?: InitOptions) {
       version: '1.0.0',
       type: 'module',
       scripts: {
-        dev: 'blockforge dev',
-        build: 'blockforge build',
+        dev: 'cmssy-forge dev',
+        build: 'cmssy-forge build',
       },
+      dependencies: {},
       devDependencies: {
-        blockforge: '^0.1.0',
+        'cmssy-forge': '^0.2.0',
       },
     };
 
     // Add framework-specific dependencies
     if (answers.framework === 'react') {
-      packageJson.devDependencies = {
-        ...packageJson.devDependencies,
+      packageJson.dependencies = {
         react: '^18.3.1',
         'react-dom': '^18.3.1',
+      };
+      packageJson.devDependencies = {
+        ...packageJson.devDependencies,
         '@types/react': '^18.3.12',
         '@types/react-dom': '^18.3.1',
+        typescript: '^5.7.2',
       };
     }
 
@@ -141,6 +145,34 @@ export async function initCommand(name?: string, options?: InitOptions) {
       path.join(projectPath, 'package.json'),
       JSON.stringify(packageJson, null, 2) + '\n'
     );
+
+    // Create tsconfig.json for React projects
+    if (answers.framework === 'react') {
+      const tsConfig = {
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'ESNext',
+          lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+          jsx: 'react-jsx',
+          moduleResolution: 'bundler',
+          allowImportingTsExtensions: true,
+          resolveJsonModule: true,
+          isolatedModules: true,
+          noEmit: true,
+          strict: true,
+          skipLibCheck: true,
+          esModuleInterop: true,
+          allowSyntheticDefaultImports: true,
+          forceConsistentCasingInFileNames: true,
+        },
+        include: ['blocks/**/*', 'templates/**/*'],
+        exclude: ['node_modules', 'dist', 'public'],
+      };
+      fs.writeFileSync(
+        path.join(projectPath, 'tsconfig.json'),
+        JSON.stringify(tsConfig, null, 2) + '\n'
+      );
+    }
 
     // Create .gitignore
     const gitignore = `node_modules/
@@ -195,7 +227,18 @@ npm run build
 
     if (answers.framework === 'react') {
       // Create React example
-      const heroComponent = `export default function Hero({ content }) {
+      const heroComponent = `interface HeroContent {
+  heading?: string;
+  subheading?: string;
+  ctaText?: string;
+  ctaUrl?: string;
+}
+
+interface HeroProps {
+  content: HeroContent;
+}
+
+export default function Hero({ content }: HeroProps) {
   const {
     heading = 'Welcome to BlockForge',
     subheading = 'Build reusable UI blocks with any framework',
