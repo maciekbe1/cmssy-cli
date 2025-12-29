@@ -1,6 +1,6 @@
 {
   "name": "cmssy-cli",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Unified CLI for building and publishing blocks to Cmssy marketplace",
   "type": "module",
   "bin": {

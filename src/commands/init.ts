@@ -127,7 +127,7 @@ export async function initCommand(name?: string, options?: InitOptions) {
       },
       dependencies: {},
       devDependencies: {
-        "cmssy-cli": "^0.4.0",
+        "cmssy-cli": "^0.5.0",
       },
     };
 
