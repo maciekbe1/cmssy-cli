@@ -1,18 +1,19 @@
-import { GraphQLClient } from 'graphql-request';
-import { loadConfig } from './config.js';
+import { GraphQLClient } from "graphql-request";
+import { loadConfig } from "./config.js";
 
 export function createClient(): GraphQLClient {
   const config = loadConfig();
 
   if (!config.apiToken) {
     throw new Error(
-      'CMSSY_API_TOKEN not configured. Run: cmssy-forge configure'
+      "CMSSY_API_TOKEN not configured. Run: cmssy-forge configure"
     );
   }
 
   return new GraphQLClient(config.apiUrl, {
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiToken}`,
     },
   });
 }
@@ -25,18 +26,6 @@ export const PUBLISH_PACKAGE_MUTATION = `
       message
       packageId
       status
-    }
-  }
-`;
-
-export const MY_API_TOKENS_QUERY = `
-  query MyApiTokens {
-    myApiTokens {
-      id
-      name
-      prefix
-      scopes
-      createdAt
     }
   }
 `;

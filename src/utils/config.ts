@@ -1,6 +1,6 @@
-import fs from 'fs-extra';
-import path from 'path';
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
+import fs from "fs-extra";
+import path from "path";
 
 export interface CmssyConfig {
   apiUrl: string;
@@ -9,27 +9,29 @@ export interface CmssyConfig {
 
 export function loadConfig(): CmssyConfig {
   // Load from .env in cwd
-  const envPath = path.join(process.cwd(), '.env');
+  const envPath = path.join(process.cwd(), ".env");
 
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
   }
 
   return {
-    apiUrl: process.env.CMSSY_API_URL || 'https://api.cmssy.io/graphql',
+    apiUrl: process.env.CMSSY_API_URL || "https://api.cmssy.io/graphql",
     apiToken: process.env.CMSSY_API_TOKEN || null,
   };
 }
 
 export function saveConfig(config: Partial<CmssyConfig>): void {
-  const envPath = path.join(process.cwd(), '.env');
-  const existingEnv = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+  const envPath = path.join(process.cwd(), ".env");
+  const existingEnv = fs.existsSync(envPath)
+    ? fs.readFileSync(envPath, "utf8")
+    : "";
 
   let newEnv = existingEnv;
 
   // Update or add CMSSY_API_TOKEN
   if (config.apiToken !== undefined) {
-    if (existingEnv.includes('CMSSY_API_TOKEN=')) {
+    if (existingEnv.includes("CMSSY_API_TOKEN=")) {
       newEnv = newEnv.replace(
         /CMSSY_API_TOKEN=.*/,
         `CMSSY_API_TOKEN=${config.apiToken}`
@@ -41,7 +43,7 @@ export function saveConfig(config: Partial<CmssyConfig>): void {
 
   // Update or add CMSSY_API_URL
   if (config.apiUrl !== undefined) {
-    if (existingEnv.includes('CMSSY_API_URL=')) {
+    if (existingEnv.includes("CMSSY_API_URL=")) {
       newEnv = newEnv.replace(
         /CMSSY_API_URL=.*/,
         `CMSSY_API_URL=${config.apiUrl}`
@@ -51,7 +53,7 @@ export function saveConfig(config: Partial<CmssyConfig>): void {
     }
   }
 
-  fs.writeFileSync(envPath, newEnv.trim() + '\n');
+  fs.writeFileSync(envPath, newEnv.trim() + "\n");
 }
 
 export function hasConfig(): boolean {

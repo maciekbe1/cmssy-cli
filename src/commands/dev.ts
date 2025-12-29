@@ -1,18 +1,18 @@
-import express from 'express';
-import chalk from 'chalk';
-import ora from 'ora';
-import fs from 'fs-extra';
-import path from 'path';
-import { loadConfig, getPackageJson } from '../utils/blockforge-config.js';
-import chokidar from 'chokidar';
-import { build } from 'esbuild';
+import chalk from "chalk";
+import chokidar from "chokidar";
+import { build } from "esbuild";
+import express from "express";
+import fs from "fs-extra";
+import ora from "ora";
+import path from "path";
+import { getPackageJson, loadConfig } from "../utils/blockforge-config.js";
 
 interface DevOptions {
   port: string;
 }
 
 interface Resource {
-  type: 'block' | 'template';
+  type: "block" | "template";
   name: string;
   path: string;
   displayName: string;
@@ -22,7 +22,7 @@ interface Resource {
 }
 
 export async function devCommand(options: DevOptions) {
-  const spinner = ora('Starting development server...').start();
+  const spinner = ora("Starting development server...").start();
 
   try {
     const config = await loadConfig();
@@ -32,14 +32,14 @@ export async function devCommand(options: DevOptions) {
     const resources = await scanResources();
 
     if (resources.length === 0) {
-      spinner.warn('No blocks or templates found');
-      console.log(chalk.yellow('\nCreate your first block:\n'));
-      console.log(chalk.white('  npx blockforge create block my-block\n'));
+      spinner.warn("No blocks or templates found");
+      console.log(chalk.yellow("\nCreate your first block:\n"));
+      console.log(chalk.white("  npx blockforge create block my-block\n"));
       process.exit(0);
     }
 
     // Build all resources initially
-    spinner.text = 'Building resources...';
+    spinner.text = "Building resources...";
     await buildAllResources(resources, config);
 
     // Setup file watcher
@@ -49,10 +49,13 @@ export async function devCommand(options: DevOptions) {
     const app = express();
 
     // Serve static files
-    app.use('/assets', express.static(path.join(process.cwd(), '.blockforge', 'dev')));
+    app.use(
+      "/assets",
+      express.static(path.join(process.cwd(), ".blockforge", "dev"))
+    );
 
     // API endpoint to list resources
-    app.get('/api/resources', (_req, res) => {
+    app.get("/api/resources", (_req, res) => {
       const resourceList = resources.map((r) => ({
         type: r.type,
         name: r.name,
@@ -64,12 +67,14 @@ export async function devCommand(options: DevOptions) {
     });
 
     // Preview page for a specific resource
-    app.get('/preview/:type/:name', async (req, res) => {
+    app.get("/preview/:type/:name", async (req, res) => {
       const { type, name } = req.params;
-      const resource = resources.find((r) => r.type === type && r.name === name);
+      const resource = resources.find(
+        (r) => r.type === type && r.name === name
+      );
 
       if (!resource) {
-        res.status(404).send('Resource not found');
+        res.status(404).send("Resource not found");
         return;
       }
 
@@ -78,48 +83,75 @@ export async function devCommand(options: DevOptions) {
     });
 
     // Home page with resource list
-    app.get('/', (_req, res) => {
+    app.get("/", (_req, res) => {
       const html = generateIndexHTML(resources);
       res.send(html);
     });
 
     // Start server
     app.listen(port, () => {
-      spinner.succeed('Development server started');
-      console.log(chalk.green.bold('\n┌─────────────────────────────────────────┐'));
-      console.log(chalk.green.bold('│   BlockForge Dev Server                 │'));
-      console.log(chalk.green.bold('├─────────────────────────────────────────┤'));
-      console.log(chalk.green('│                                         │'));
+      spinner.succeed("Development server started");
+      console.log(
+        chalk.green.bold("\n┌─────────────────────────────────────────┐")
+      );
+      console.log(
+        chalk.green.bold("│   BlockForge Dev Server                 │")
+      );
+      console.log(
+        chalk.green.bold("├─────────────────────────────────────────┤")
+      );
+      console.log(chalk.green("│                                         │"));
 
-      const blocks = resources.filter((r) => r.type === 'block');
-      const templates = resources.filter((r) => r.type === 'template');
+      const blocks = resources.filter((r) => r.type === "block");
+      const templates = resources.filter((r) => r.type === "template");
 
       if (blocks.length > 0) {
-        console.log(chalk.cyan(`│   Blocks (${blocks.length})                           │`));
+        console.log(
+          chalk.cyan(
+            `│   Blocks (${blocks.length})                           │`
+          )
+        );
         blocks.forEach((block) => {
           const url = `/preview/block/${block.name}`;
-          console.log(chalk.white(`│   ● ${block.displayName.padEnd(20)} ${url.padEnd(15)}│`));
+          console.log(
+            chalk.white(
+              `│   ● ${block.displayName.padEnd(20)} ${url.padEnd(15)}│`
+            )
+          );
         });
-        console.log(chalk.green('│                                         │'));
+        console.log(chalk.green("│                                         │"));
       }
 
       if (templates.length > 0) {
-        console.log(chalk.cyan(`│   Templates (${templates.length})                       │`));
+        console.log(
+          chalk.cyan(
+            `│   Templates (${templates.length})                       │`
+          )
+        );
         templates.forEach((template) => {
           const url = `/preview/template/${template.name}`;
-          console.log(chalk.white(`│   ● ${template.displayName.padEnd(20)} ${url.padEnd(15)}│`));
+          console.log(
+            chalk.white(
+              `│   ● ${template.displayName.padEnd(20)} ${url.padEnd(15)}│`
+            )
+          );
         });
-        console.log(chalk.green('│                                         │'));
+        console.log(chalk.green("│                                         │"));
       }
 
-      console.log(chalk.green(`│   Local:   ${chalk.cyan(`http://localhost:${port}`).padEnd(36)}│`));
-      console.log(chalk.green('│   Hot reload enabled ✓                  │'));
-      console.log(chalk.green.bold('└─────────────────────────────────────────┘\n'));
+      console.log(
+        chalk.green(
+          `│   Local:   ${chalk.cyan(`http://localhost:${port}`).padEnd(36)}│`
+        )
+      );
+      console.log(chalk.green("│   Hot reload enabled ✓                  │"));
+      console.log(
+        chalk.green.bold("└─────────────────────────────────────────┘\n")
+      );
     });
-
   } catch (error) {
-    spinner.fail('Failed to start development server');
-    console.error(chalk.red('Error:'), error);
+    spinner.fail("Failed to start development server");
+    console.error(chalk.red("Error:"), error);
     process.exit(1);
   }
 }
@@ -128,9 +160,10 @@ async function scanResources(): Promise<Resource[]> {
   const resources: Resource[] = [];
 
   // Scan blocks
-  const blocksDir = path.join(process.cwd(), 'blocks');
+  const blocksDir = path.join(process.cwd(), "blocks");
   if (fs.existsSync(blocksDir)) {
-    const blockDirs = fs.readdirSync(blocksDir, { withFileTypes: true })
+    const blockDirs = fs
+      .readdirSync(blocksDir, { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
       .map((dirent) => dirent.name);
 
@@ -140,13 +173,13 @@ async function scanResources(): Promise<Resource[]> {
 
       if (!pkg || !pkg.blockforge) continue;
 
-      const previewPath = path.join(blockPath, 'preview.json');
+      const previewPath = path.join(blockPath, "preview.json");
       const previewData = fs.existsSync(previewPath)
         ? fs.readJsonSync(previewPath)
         : pkg.blockforge.defaultContent || {};
 
       resources.push({
-        type: 'block',
+        type: "block",
         name: blockName,
         path: blockPath,
         displayName: pkg.blockforge.displayName || blockName,
@@ -158,9 +191,10 @@ async function scanResources(): Promise<Resource[]> {
   }
 
   // Scan templates
-  const templatesDir = path.join(process.cwd(), 'templates');
+  const templatesDir = path.join(process.cwd(), "templates");
   if (fs.existsSync(templatesDir)) {
-    const templateDirs = fs.readdirSync(templatesDir, { withFileTypes: true })
+    const templateDirs = fs
+      .readdirSync(templatesDir, { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
       .map((dirent) => dirent.name);
 
@@ -170,13 +204,13 @@ async function scanResources(): Promise<Resource[]> {
 
       if (!pkg || !pkg.blockforge) continue;
 
-      const previewPath = path.join(templatePath, 'preview.json');
+      const previewPath = path.join(templatePath, "preview.json");
       const previewData = fs.existsSync(previewPath)
         ? fs.readJsonSync(previewPath)
         : pkg.blockforge.defaultContent || {};
 
       resources.push({
-        type: 'template',
+        type: "template",
         name: templateName,
         path: templatePath,
         displayName: pkg.blockforge.displayName || templateName,
@@ -191,7 +225,7 @@ async function scanResources(): Promise<Resource[]> {
 }
 
 async function buildAllResources(resources: Resource[], config: any) {
-  const devDir = path.join(process.cwd(), '.blockforge', 'dev');
+  const devDir = path.join(process.cwd(), ".blockforge", "dev");
   fs.ensureDirSync(devDir);
 
   for (const resource of resources) {
@@ -200,13 +234,16 @@ async function buildAllResources(resources: Resource[], config: any) {
 }
 
 async function buildResource(resource: Resource, config: any, outDir: string) {
-  const srcPath = path.join(resource.path, 'src');
-  const entryPoint = config.framework === 'react'
-    ? path.join(srcPath, 'index.tsx')
-    : path.join(srcPath, 'index.ts');
+  const srcPath = path.join(resource.path, "src");
+  const entryPoint =
+    config.framework === "react"
+      ? path.join(srcPath, "index.tsx")
+      : path.join(srcPath, "index.ts");
 
   if (!fs.existsSync(entryPoint)) {
-    console.warn(chalk.yellow(`Warning: Entry point not found for ${resource.name}`));
+    console.warn(
+      chalk.yellow(`Warning: Entry point not found for ${resource.name}`)
+    );
     return;
   }
 
@@ -216,19 +253,22 @@ async function buildResource(resource: Resource, config: any, outDir: string) {
     await build({
       entryPoints: [entryPoint],
       bundle: true,
-      format: 'esm',
+      format: "esm",
       outfile: outFile,
-      jsx: 'transform',
+      jsx: "transform",
       minify: false,
       sourcemap: true,
-      target: 'es2020',
+      target: "es2020",
       external: [],
     });
 
     // Copy CSS if exists
-    const cssPath = path.join(srcPath, 'index.css');
+    const cssPath = path.join(srcPath, "index.css");
     if (fs.existsSync(cssPath)) {
-      const outCssFile = path.join(outDir, `${resource.type}.${resource.name}.css`);
+      const outCssFile = path.join(
+        outDir,
+        `${resource.type}.${resource.name}.css`
+      );
       fs.copyFileSync(cssPath, outCssFile);
     }
   } catch (error) {
@@ -237,15 +277,18 @@ async function buildResource(resource: Resource, config: any, outDir: string) {
 }
 
 function setupWatcher(resources: Resource[], config: any) {
-  const devDir = path.join(process.cwd(), '.blockforge', 'dev');
+  const devDir = path.join(process.cwd(), ".blockforge", "dev");
 
-  const watcher = chokidar.watch(['blocks/**/src/**/*', 'templates/**/src/**/*'], {
-    persistent: true,
-    ignoreInitial: true,
-  });
+  const watcher = chokidar.watch(
+    ["blocks/**/src/**/*", "templates/**/src/**/*"],
+    {
+      persistent: true,
+      ignoreInitial: true,
+    }
+  );
 
-  watcher.on('change', async (filepath) => {
-    const resourcePath = filepath.split('/src/')[0];
+  watcher.on("change", async (filepath) => {
+    const resourcePath = filepath.split("/src/")[0];
     const resource = resources.find((r) => resourcePath.includes(r.name));
 
     if (resource) {
@@ -259,8 +302,8 @@ function setupWatcher(resources: Resource[], config: any) {
 }
 
 function generateIndexHTML(resources: Resource[]): string {
-  const blocks = resources.filter((r) => r.type === 'block');
-  const templates = resources.filter((r) => r.type === 'template');
+  const blocks = resources.filter((r) => r.type === "block");
+  const templates = resources.filter((r) => r.type === "template");
 
   return `
 <!DOCTYPE html>
@@ -326,36 +369,68 @@ function generateIndexHTML(resources: Resource[]): string {
     <h1>🔨 BlockForge</h1>
     <p class="subtitle">Development Server</p>
 
-    ${blocks.length > 0 ? `
+    ${
+      blocks.length > 0
+        ? `
       <div class="section">
         <h2 class="section-title">Blocks (${blocks.length})</h2>
         <div class="grid">
-          ${blocks.map((block) => `
+          ${blocks
+            .map(
+              (block) => `
             <div class="card">
               <h3 class="card-title">${block.displayName}</h3>
-              ${block.description ? `<p class="card-desc">${block.description}</p>` : ''}
-              ${block.category ? `<div class="card-category">${block.category}</div>` : ''}
-              <a href="/preview/block/${block.name}" class="card-link">Preview →</a>
+              ${
+                block.description
+                  ? `<p class="card-desc">${block.description}</p>`
+                  : ""
+              }
+              ${
+                block.category
+                  ? `<div class="card-category">${block.category}</div>`
+                  : ""
+              }
+              <a href="/preview/block/${
+                block.name
+              }" class="card-link">Preview →</a>
             </div>
-          `).join('')}
+          `
+            )
+            .join("")}
         </div>
       </div>
-    ` : '<div class="empty">No blocks found. Create one with: <code>npx blockforge create block my-block</code></div>'}
+    `
+        : '<div class="empty">No blocks found. Create one with: <code>npx blockforge create block my-block</code></div>'
+    }
 
-    ${templates.length > 0 ? `
+    ${
+      templates.length > 0
+        ? `
       <div class="section">
         <h2 class="section-title">Templates (${templates.length})</h2>
         <div class="grid">
-          ${templates.map((template) => `
+          ${templates
+            .map(
+              (template) => `
             <div class="card">
               <h3 class="card-title">${template.displayName}</h3>
-              ${template.description ? `<p class="card-desc">${template.description}</p>` : ''}
-              <a href="/preview/template/${template.name}" class="card-link">Preview →</a>
+              ${
+                template.description
+                  ? `<p class="card-desc">${template.description}</p>`
+                  : ""
+              }
+              <a href="/preview/template/${
+                template.name
+              }" class="card-link">Preview →</a>
             </div>
-          `).join('')}
+          `
+            )
+            .join("")}
         </div>
       </div>
-    ` : ''}
+    `
+        : ""
+    }
   </div>
 </body>
 </html>

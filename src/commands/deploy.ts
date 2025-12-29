@@ -1,12 +1,11 @@
-import chalk from 'chalk';
-import ora from 'ora';
-import fs from 'fs-extra';
-import path from 'path';
-import { glob } from 'glob';
-import FormData from 'form-data';
-import fetch from 'node-fetch';
-import { createClient, PUBLISH_PACKAGE_MUTATION } from '../utils/graphql.js';
-import { loadConfig, hasConfig } from '../utils/config.js';
+import chalk from "chalk";
+import FormData from "form-data";
+import fs from "fs-extra";
+import fetch from "node-fetch";
+import ora from "ora";
+import path from "path";
+import { hasConfig, loadConfig } from "../utils/config.js";
+import { createClient, PUBLISH_PACKAGE_MUTATION } from "../utils/graphql.js";
 
 interface DeployOptions {
   all?: boolean;
@@ -16,27 +15,29 @@ interface DeployOptions {
 }
 
 interface PackageInfo {
-  type: 'block' | 'template';
+  type: "block" | "template";
   name: string;
   path: string;
   packageJson: any;
 }
 
 export async function deployCommand(options: DeployOptions) {
-  console.log(chalk.blue.bold('\n🔨 Cmssy Forge - Deploy to Marketplace\n'));
+  console.log(chalk.blue.bold("\n🔨 Cmssy Forge - Deploy to Marketplace\n"));
 
   // Check configuration
   if (!hasConfig()) {
-    console.error(chalk.red('✖ Not configured. Run: cmssy-forge configure\n'));
+    console.error(chalk.red("✖ Not configured. Run: cmssy-forge configure\n"));
     process.exit(1);
   }
 
   const config = loadConfig();
 
   // Find blockforge.config.js
-  const configPath = path.join(process.cwd(), 'blockforge.config.js');
+  const configPath = path.join(process.cwd(), "blockforge.config.js");
   if (!fs.existsSync(configPath)) {
-    console.error(chalk.red('✖ Not a blockforge project (missing blockforge.config.js)\n'));
+    console.error(
+      chalk.red("✖ Not a blockforge project (missing blockforge.config.js)\n")
+    );
     process.exit(1);
   }
 
@@ -44,18 +45,20 @@ export async function deployCommand(options: DeployOptions) {
   const packages = await scanPackages(options);
 
   if (packages.length === 0) {
-    console.log(chalk.yellow('⚠ No packages found to deploy\n'));
+    console.log(chalk.yellow("⚠ No packages found to deploy\n"));
     return;
   }
 
   console.log(chalk.cyan(`Found ${packages.length} package(s) to deploy:\n`));
   packages.forEach((pkg) => {
-    console.log(chalk.white(`  • ${pkg.packageJson.name} v${pkg.packageJson.version}`));
+    console.log(
+      chalk.white(`  • ${pkg.packageJson.name} v${pkg.packageJson.version}`)
+    );
   });
-  console.log('');
+  console.log("");
 
   if (options.dryRun) {
-    console.log(chalk.yellow('🔍 Dry run mode - nothing will be published\n'));
+    console.log(chalk.yellow("🔍 Dry run mode - nothing will be published\n"));
     return;
   }
 
@@ -65,11 +68,15 @@ export async function deployCommand(options: DeployOptions) {
   let errorCount = 0;
 
   for (const pkg of packages) {
-    const spinner = ora(`Uploading ${pkg.packageJson.name} to Cmssy...`).start();
+    const spinner = ora(
+      `Uploading ${pkg.packageJson.name} to Cmssy...`
+    ).start();
 
     try {
       await deployPackage(client, pkg, config.apiToken!, config.apiUrl);
-      spinner.succeed(chalk.green(`${pkg.packageJson.name} submitted for review`));
+      spinner.succeed(
+        chalk.green(`${pkg.packageJson.name} submitted for review`)
+      );
       successCount++;
     } catch (error: any) {
       spinner.fail(chalk.red(`${pkg.packageJson.name} failed`));
@@ -78,13 +85,17 @@ export async function deployCommand(options: DeployOptions) {
     }
   }
 
-  console.log('');
+  console.log("");
   if (errorCount === 0) {
-    console.log(chalk.green.bold(`✓ ${successCount} package(s) submitted for review\n`));
-    console.log(chalk.cyan('Your packages are pending Cmssy review.'));
+    console.log(
+      chalk.green.bold(`✓ ${successCount} package(s) submitted for review\n`)
+    );
+    console.log(chalk.cyan("Your packages are pending Cmssy review."));
     console.log(chalk.cyan("You'll be notified when they're approved.\n"));
   } else {
-    console.log(chalk.yellow(`⚠ ${successCount} succeeded, ${errorCount} failed\n`));
+    console.log(
+      chalk.yellow(`⚠ ${successCount} succeeded, ${errorCount} failed\n`)
+    );
   }
 }
 
@@ -92,9 +103,10 @@ async function scanPackages(options: DeployOptions): Promise<PackageInfo[]> {
   const packages: PackageInfo[] = [];
 
   // Scan blocks
-  const blocksDir = path.join(process.cwd(), 'blocks');
+  const blocksDir = path.join(process.cwd(), "blocks");
   if (fs.existsSync(blocksDir)) {
-    const blockDirs = fs.readdirSync(blocksDir, { withFileTypes: true })
+    const blockDirs = fs
+      .readdirSync(blocksDir, { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
       .map((dirent) => dirent.name);
 
@@ -108,7 +120,7 @@ async function scanPackages(options: DeployOptions): Promise<PackageInfo[]> {
       }
 
       const blockPath = path.join(blocksDir, blockName);
-      const pkgPath = path.join(blockPath, 'package.json');
+      const pkgPath = path.join(blockPath, "package.json");
 
       if (!fs.existsSync(pkgPath)) continue;
 
@@ -116,7 +128,7 @@ async function scanPackages(options: DeployOptions): Promise<PackageInfo[]> {
       if (!packageJson.blockforge) continue;
 
       packages.push({
-        type: 'block',
+        type: "block",
         name: blockName,
         path: blockPath,
         packageJson,
@@ -125,9 +137,10 @@ async function scanPackages(options: DeployOptions): Promise<PackageInfo[]> {
   }
 
   // Scan templates
-  const templatesDir = path.join(process.cwd(), 'templates');
+  const templatesDir = path.join(process.cwd(), "templates");
   if (fs.existsSync(templatesDir)) {
-    const templateDirs = fs.readdirSync(templatesDir, { withFileTypes: true })
+    const templateDirs = fs
+      .readdirSync(templatesDir, { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
       .map((dirent) => dirent.name);
 
@@ -141,7 +154,7 @@ async function scanPackages(options: DeployOptions): Promise<PackageInfo[]> {
       }
 
       const templatePath = path.join(templatesDir, templateName);
-      const pkgPath = path.join(templatePath, 'package.json');
+      const pkgPath = path.join(templatePath, "package.json");
 
       if (!fs.existsSync(pkgPath)) continue;
 
@@ -149,7 +162,7 @@ async function scanPackages(options: DeployOptions): Promise<PackageInfo[]> {
       if (!packageJson.blockforge) continue;
 
       packages.push({
-        type: 'template',
+        type: "template",
         name: templateName,
         path: templatePath,
         packageJson,
@@ -182,49 +195,52 @@ async function uploadFilesToBackend(
   const form = new FormData();
 
   // Add package metadata
-  form.append('packageName', packageName);
-  form.append('version', version);
+  form.append("packageName", packageName);
+  form.append("version", version);
 
   // Add index.js file
-  const indexJsPath = path.join(packagePublicPath, 'index.js');
+  const indexJsPath = path.join(packagePublicPath, "index.js");
   if (!fs.existsSync(indexJsPath)) {
     throw new Error(`index.js not found at ${indexJsPath}`);
   }
-  form.append('component', fs.createReadStream(indexJsPath), {
-    filename: 'index.js',
-    contentType: 'application/javascript',
+  form.append("component", fs.createReadStream(indexJsPath), {
+    filename: "index.js",
+    contentType: "application/javascript",
   });
 
   // Add index.css if exists
-  const indexCssPath = path.join(packagePublicPath, 'index.css');
+  const indexCssPath = path.join(packagePublicPath, "index.css");
   if (fs.existsSync(indexCssPath)) {
-    form.append('css', fs.createReadStream(indexCssPath), {
-      filename: 'index.css',
-      contentType: 'text/css',
+    form.append("css", fs.createReadStream(indexCssPath), {
+      filename: "index.css",
+      contentType: "text/css",
     });
   }
 
   // Add package.json
-  const packageJsonPath = path.join(packagePublicPath, 'package.json');
+  const packageJsonPath = path.join(packagePublicPath, "package.json");
   let pkgJsonToUpload = packageJsonPath;
 
   if (!fs.existsSync(packageJsonPath)) {
     // If package.json doesn't exist in build output, use source
-    pkgJsonToUpload = path.join(path.dirname(path.dirname(packagePublicPath)), 'package.json');
+    pkgJsonToUpload = path.join(
+      path.dirname(path.dirname(packagePublicPath)),
+      "package.json"
+    );
   }
 
-  form.append('packageJson', fs.createReadStream(pkgJsonToUpload), {
-    filename: 'package.json',
-    contentType: 'application/json',
+  form.append("packageJson", fs.createReadStream(pkgJsonToUpload), {
+    filename: "package.json",
+    contentType: "application/json",
   });
 
   // Determine API base URL (remove /graphql suffix if present)
-  const apiBase = apiUrl.replace('/graphql', '');
+  const apiBase = apiUrl.replace("/graphql", "");
   const uploadUrl = `${apiBase}/api/upload-package`;
 
   // Upload to backend
   const response = await fetch(uploadUrl, {
-    method: 'POST',
+    method: "POST",
     headers: {
       Authorization: `Bearer ${apiToken}`,
       ...form.getHeaders(),
@@ -237,7 +253,7 @@ async function uploadFilesToBackend(
     throw new Error(`Upload failed: ${response.statusText}. ${errorText}`);
   }
 
-  const result = await response.json() as UploadResponse;
+  const result = (await response.json()) as UploadResponse;
 
   return {
     componentUrl: result.componentUrl,
@@ -256,8 +272,12 @@ async function deployPackage(
   const metadata = packageJson.blockforge;
 
   // Find built files in public/ directory
-  const publicDir = path.join(process.cwd(), 'public');
-  const packagePublicPath = path.join(publicDir, packageJson.name, packageJson.version);
+  const publicDir = path.join(process.cwd(), "public");
+  const packagePublicPath = path.join(
+    publicDir,
+    packageJson.name,
+    packageJson.version
+  );
 
   if (!fs.existsSync(packagePublicPath)) {
     throw new Error(
@@ -279,20 +299,20 @@ async function deployPackage(
     name: packageJson.name,
     version: packageJson.version,
     displayName: metadata.displayName,
-    description: packageJson.description || metadata.description || '',
-    longDescription: metadata.longDescription || packageJson.description || '',
+    description: packageJson.description || metadata.description || "",
+    longDescription: metadata.longDescription || packageJson.description || "",
     packageType: metadata.packageType || pkg.type,
-    category: metadata.category || 'other',
+    category: metadata.category || "other",
     tags: metadata.tags || [],
     componentUrl,
     cssUrl,
     packageJsonUrl,
     schemaFields: metadata.schemaFields || null,
     defaultContent: metadata.defaultContent || null,
-    vendorName: packageJson.author?.name || packageJson.author || 'Unknown',
+    vendorName: packageJson.author?.name || packageJson.author || "Unknown",
     vendorEmail: packageJson.author?.email || null,
     vendorUrl: packageJson.author?.url || packageJson.homepage || null,
-    licenseType: metadata.pricing?.licenseType || 'free',
+    licenseType: metadata.pricing?.licenseType || "free",
     priceCents: metadata.pricing?.priceCents || 0,
   };
 

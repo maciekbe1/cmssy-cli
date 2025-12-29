@@ -1,10 +1,10 @@
-import chalk from 'chalk';
-import ora from 'ora';
-import fs from 'fs-extra';
-import path from 'path';
-import inquirer from 'inquirer';
-import { createClient } from '../utils/graphql.js';
-import { loadConfig, hasConfig } from '../utils/config.js';
+import chalk from "chalk";
+import fs from "fs-extra";
+import inquirer from "inquirer";
+import ora from "ora";
+import path from "path";
+import { hasConfig, loadConfig } from "../utils/config.js";
+import { createClient } from "../utils/graphql.js";
 
 interface SyncOptions {
   workspace?: string;
@@ -36,21 +36,26 @@ const INSTALLED_PACKAGES_QUERY = `
   }
 `;
 
-export async function syncCommand(packageSlug: string | undefined, options: SyncOptions) {
-  console.log(chalk.blue.bold('\n🔨 Cmssy Forge - Sync Blocks\n'));
+export async function syncCommand(
+  packageSlug: string | undefined,
+  options: SyncOptions
+) {
+  console.log(chalk.blue.bold("\n🔨 Cmssy Forge - Sync Blocks\n"));
 
   // Check configuration
   if (!hasConfig()) {
-    console.error(chalk.red('✖ Not configured. Run: cmssy-forge configure\n'));
+    console.error(chalk.red("✖ Not configured. Run: cmssy-forge configure\n"));
     process.exit(1);
   }
 
   const config = loadConfig();
 
   // Check if we're in a blockforge project
-  const configPath = path.join(process.cwd(), 'blockforge.config.js');
+  const configPath = path.join(process.cwd(), "blockforge.config.js");
   if (!fs.existsSync(configPath)) {
-    console.error(chalk.red('✖ Not a blockforge project (missing blockforge.config.js)\n'));
+    console.error(
+      chalk.red("✖ Not a blockforge project (missing blockforge.config.js)\n")
+    );
     process.exit(1);
   }
 
@@ -59,12 +64,12 @@ export async function syncCommand(packageSlug: string | undefined, options: Sync
   if (!workspaceId) {
     const answer = await inquirer.prompt([
       {
-        type: 'input',
-        name: 'workspaceId',
-        message: 'Enter Workspace ID:',
+        type: "input",
+        name: "workspaceId",
+        message: "Enter Workspace ID:",
         validate: (input) => {
           if (!input) {
-            return 'Workspace ID is required';
+            return "Workspace ID is required";
           }
           return true;
         },
@@ -74,7 +79,7 @@ export async function syncCommand(packageSlug: string | undefined, options: Sync
   }
 
   // Fetch installed packages
-  const spinner = ora('Fetching installed packages...').start();
+  const spinner = ora("Fetching installed packages...").start();
   const client = createClient();
 
   try {
@@ -82,18 +87,18 @@ export async function syncCommand(packageSlug: string | undefined, options: Sync
       workspaceId,
     });
 
-    spinner.succeed(chalk.green('Fetched installed packages'));
+    spinner.succeed(chalk.green("Fetched installed packages"));
 
     const workspace = result.workspace;
     if (!workspace) {
-      console.error(chalk.red('✖ Workspace not found\n'));
+      console.error(chalk.red("✖ Workspace not found\n"));
       process.exit(1);
     }
 
     const installedPackages = workspace.installedPackages || [];
 
     if (installedPackages.length === 0) {
-      console.log(chalk.yellow('⚠ No packages installed in this workspace\n'));
+      console.log(chalk.yellow("⚠ No packages installed in this workspace\n"));
       return;
     }
 
@@ -105,12 +110,16 @@ export async function syncCommand(packageSlug: string | undefined, options: Sync
       );
 
       if (packagesToSync.length === 0) {
-        console.error(chalk.red(`✖ Package "${packageSlug}" not found in workspace\n`));
+        console.error(
+          chalk.red(`✖ Package "${packageSlug}" not found in workspace\n`)
+        );
         process.exit(1);
       }
     }
 
-    console.log(chalk.cyan(`\nFound ${packagesToSync.length} package(s) to sync:\n`));
+    console.log(
+      chalk.cyan(`\nFound ${packagesToSync.length} package(s) to sync:\n`)
+    );
     packagesToSync.forEach((ip: any) => {
       console.log(
         chalk.white(
@@ -118,7 +127,7 @@ export async function syncCommand(packageSlug: string | undefined, options: Sync
         )
       );
     });
-    console.log('');
+    console.log("");
 
     // Sync each package
     let successCount = 0;
@@ -139,14 +148,16 @@ export async function syncCommand(packageSlug: string | undefined, options: Sync
       }
     }
 
-    console.log('');
+    console.log("");
     if (errorCount === 0) {
       console.log(chalk.green.bold(`✓ ${successCount} package(s) synced\n`));
     } else {
-      console.log(chalk.yellow(`⚠ ${successCount} succeeded, ${errorCount} failed\n`));
+      console.log(
+        chalk.yellow(`⚠ ${successCount} succeeded, ${errorCount} failed\n`)
+      );
     }
   } catch (error: any) {
-    spinner.fail(chalk.red('Failed to fetch packages'));
+    spinner.fail(chalk.red("Failed to fetch packages"));
     console.error(chalk.red(`  Error: ${error.message}\n`));
     process.exit(1);
   }
@@ -157,28 +168,28 @@ async function syncPackage(pkg: any): Promise<void> {
 
   // Determine target directory
   const targetDir =
-    packageType === 'block'
-      ? path.join(process.cwd(), 'blocks', getPackageName(slug))
-      : path.join(process.cwd(), 'templates', getPackageName(slug));
+    packageType === "block"
+      ? path.join(process.cwd(), "blocks", getPackageName(slug))
+      : path.join(process.cwd(), "templates", getPackageName(slug));
 
   // Create directory if it doesn't exist
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  const srcDir = path.join(targetDir, 'src');
+  const srcDir = path.join(targetDir, "src");
   if (!fs.existsSync(srcDir)) {
     fs.mkdirSync(srcDir, { recursive: true });
   }
 
   // Download component JavaScript
   const componentCode = await downloadFile(currentVersion.componentUrl);
-  fs.writeFileSync(path.join(srcDir, 'index.tsx'), componentCode);
+  fs.writeFileSync(path.join(srcDir, "index.tsx"), componentCode);
 
   // Download CSS if available
   if (currentVersion.cssUrl) {
     const cssCode = await downloadFile(currentVersion.cssUrl);
-    fs.writeFileSync(path.join(srcDir, 'index.css'), cssCode);
+    fs.writeFileSync(path.join(srcDir, "index.css"), cssCode);
   }
 
   // Download and parse package.json
@@ -190,12 +201,16 @@ async function syncPackage(pkg: any): Promise<void> {
 
   if (currentVersion.packageJsonUrl) {
     try {
-      const packageJsonContent = await downloadFile(currentVersion.packageJsonUrl);
+      const packageJsonContent = await downloadFile(
+        currentVersion.packageJsonUrl
+      );
       packageJsonData = JSON.parse(packageJsonContent);
     } catch (error) {
       // If package.json fetch fails, use defaults
       console.warn(
-        chalk.yellow(`  Warning: Could not fetch package.json for ${slug}, using defaults`)
+        chalk.yellow(
+          `  Warning: Could not fetch package.json for ${slug}, using defaults`
+        )
       );
     }
   }
@@ -210,7 +225,7 @@ async function syncPackage(pkg: any): Promise<void> {
 
   // Write package.json
   fs.writeFileSync(
-    path.join(targetDir, 'package.json'),
+    path.join(targetDir, "package.json"),
     JSON.stringify(packageJsonData, null, 2)
   );
 
@@ -230,7 +245,7 @@ pnpm build:${packageType} ${targetDir}
 \`\`\`
 `;
 
-  fs.writeFileSync(path.join(targetDir, 'README.md'), readme);
+  fs.writeFileSync(path.join(targetDir, "README.md"), readme);
 }
 
 async function downloadFile(url: string): Promise<string> {
@@ -247,8 +262,8 @@ function getPackageName(slug: string): string {
   // Extract package name from slug
   // e.g., @cmssy/blocks.hero -> hero
   // e.g., @vendor/blocks.pricing -> pricing
-  const parts = slug.split('/');
+  const parts = slug.split("/");
   const lastPart = parts[parts.length - 1];
-  const nameParts = lastPart.split('.');
+  const nameParts = lastPart.split(".");
   return nameParts[nameParts.length - 1];
 }

@@ -1,5 +1,5 @@
-import fs from 'fs-extra';
-import path from 'path';
+import fs from "fs-extra";
+import path from "path";
 
 export interface BlockForgeConfig {
   framework: string;
@@ -19,10 +19,12 @@ export interface BlockForgeConfig {
 }
 
 export async function loadConfig(): Promise<BlockForgeConfig> {
-  const configPath = path.join(process.cwd(), 'blockforge.config.js');
+  const configPath = path.join(process.cwd(), "blockforge.config.js");
 
   if (!fs.existsSync(configPath)) {
-    throw new Error('blockforge.config.js not found. Are you in a blockforge project?');
+    throw new Error(
+      "blockforge.config.js not found. Are you in a blockforge project?"
+    );
   }
 
   // Dynamic import for ESM
@@ -31,7 +33,7 @@ export async function loadConfig(): Promise<BlockForgeConfig> {
 }
 
 export function getPackageJson(packagePath: string) {
-  const pkgPath = path.join(packagePath, 'package.json');
+  const pkgPath = path.join(packagePath, "package.json");
   if (!fs.existsSync(pkgPath)) {
     return null;
   }
