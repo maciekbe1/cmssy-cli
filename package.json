@@ -20,6 +20,19 @@
   ],
   "author": "Cmssy Team",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maciekbe1/cmssy-forge.git"
+  },
+  "homepage": "https://github.com/maciekbe1/cmssy-forge#readme",
+  "bugs": {
+    "url": "https://github.com/maciekbe1/cmssy-forge/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
