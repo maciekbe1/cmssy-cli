@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name('cmssy-forge')
   .description('Unified CLI for building and publishing blocks to Cmssy marketplace')
-  .version('0.2.1');
+  .version('0.2.2');
 
 // cmssy-forge init
 program

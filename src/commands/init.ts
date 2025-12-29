@@ -135,7 +135,7 @@ export async function initCommand(name?: string, options?: InitOptions) {
       };
       packageJson.devDependencies = {
         ...packageJson.devDependencies,
-        '@types/react': '^18.3.12',
+        '@types/react': '^19.2.7',
         '@types/react-dom': '^18.3.1',
         typescript: '^5.7.2',
       };
