@@ -43,11 +43,28 @@ export async function devCommand(options: DevOptions) {
     spinner.text = "Building resources...";
     await buildAllResources(resources, config);
 
-    // Setup file watcher
-    const watcher = setupWatcher(resources, config);
-
     // Create Express server
     const app = express();
+
+    // SSE clients for hot reload
+    const sseClients: any[] = [];
+
+    // SSE endpoint for hot reload
+    app.get("/events", (req, res) => {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      sseClients.push(res);
+
+      req.on("close", () => {
+        const index = sseClients.indexOf(res);
+        if (index !== -1) sseClients.splice(index, 1);
+      });
+    });
+
+    // Setup file watcher with SSE notifications
+    const watcher = setupWatcher(resources, config, sseClients);
 
     // Serve static files
     app.use(
@@ -260,7 +277,7 @@ async function buildResource(resource: Resource, config: any, outDir: string) {
       minify: false,
       sourcemap: true,
       target: "es2020",
-      external: [],
+      external: ["*.css"],
     });
 
     // Process CSS with PostCSS if exists
@@ -278,15 +295,16 @@ async function buildResource(resource: Resource, config: any, outDir: string) {
         // Use PostCSS to process CSS (includes Tailwind)
         try {
           execSync(`npx postcss "${cssPath}" -o "${outCssFile}"`, {
-            stdio: "ignore",
+            stdio: "pipe",
             cwd: process.cwd(),
           });
-        } catch (error) {
+        } catch (error: any) {
           console.warn(
             chalk.yellow(
-              `Warning: PostCSS processing failed for ${resource.name}, copying CSS as-is`
+              `Warning: PostCSS processing failed for ${resource.name}: ${error.message}`
             )
           );
+          console.log(chalk.gray("Copying CSS as-is..."));
           fs.copyFileSync(cssPath, outCssFile);
         }
       } else {
@@ -299,26 +317,78 @@ async function buildResource(resource: Resource, config: any, outDir: string) {
   }
 }
 
-function setupWatcher(resources: Resource[], config: any) {
+function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
   const devDir = path.join(process.cwd(), ".blockforge", "dev");
 
-  const watcher = chokidar.watch(
-    ["blocks/**/src/**/*", "templates/**/src/**/*"],
-    {
-      persistent: true,
-      ignoreInitial: true,
-    }
-  );
+  // Watch directories directly instead of globs (globs don't work reliably in chokidar)
+  const watchPaths: string[] = [];
+  const blocksDir = path.join(process.cwd(), "blocks");
+  const templatesDir = path.join(process.cwd(), "templates");
+
+  if (fs.existsSync(blocksDir)) watchPaths.push(blocksDir);
+  if (fs.existsSync(templatesDir)) watchPaths.push(templatesDir);
+
+  console.log(chalk.gray(`\nSetting up watcher for:`));
+  watchPaths.forEach((p) => console.log(chalk.gray(`  ${p}`)));
+
+  const watcher = chokidar.watch(watchPaths, {
+    persistent: true,
+    ignoreInitial: true,
+    awaitWriteFinish: {
+      stabilityThreshold: 100,
+      pollInterval: 100,
+    },
+  });
+
+  // Debug: log all watcher events
+  watcher.on("add", (filepath) => {
+    console.log(chalk.gray(`File added: ${filepath}`));
+  });
 
   watcher.on("change", async (filepath) => {
-    const resourcePath = filepath.split("/src/")[0];
-    const resource = resources.find((r) => resourcePath.includes(r.name));
+    console.log(chalk.yellow(`\n📝 File changed: ${filepath}`));
+
+    // Extract resource name from path (e.g., "blocks/hero/src/Hero.tsx" -> "hero")
+    const pathParts = filepath.split(path.sep);
+    const blockOrTemplateIndex = pathParts.indexOf("blocks") !== -1
+      ? pathParts.indexOf("blocks")
+      : pathParts.indexOf("templates");
+
+    if (blockOrTemplateIndex === -1) return;
+
+    const resourceName = pathParts[blockOrTemplateIndex + 1];
+    const resource = resources.find((r) => r.name === resourceName);
 
     if (resource) {
-      console.log(chalk.blue(`\n♻  Rebuilding ${resource.name}...`));
+      console.log(chalk.blue(`♻  Rebuilding ${resource.name}...`));
       await buildResource(resource, config, devDir);
       console.log(chalk.green(`✓ ${resource.name} rebuilt\n`));
+
+      // Notify SSE clients to reload
+      sseClients.forEach((client) => {
+        try {
+          client.write(`data: ${JSON.stringify({ type: "reload" })}\n\n`);
+        } catch (error) {
+          // Client disconnected
+        }
+      });
+    } else {
+      console.log(chalk.yellow(`Warning: Could not find resource for ${filepath}`));
     }
+  });
+
+  watcher.on("ready", () => {
+    const watched = watcher.getWatched();
+    console.log(chalk.gray("\nFile watcher ready. Watching:"));
+    Object.keys(watched).forEach((dir) => {
+      if (watched[dir].length > 0) {
+        console.log(chalk.gray(`  ${dir}/`));
+      }
+    });
+  });
+
+  watcher.on("error", (error) => {
+    console.error(chalk.red("Watcher error:"), error);
   });
 
   return watcher;
@@ -461,8 +531,9 @@ function generateIndexHTML(resources: Resource[]): string {
 }
 
 function generatePreviewHTML(resource: Resource, config: any): string {
-  const jsPath = `/assets/${resource.type}.${resource.name}.js`;
-  const cssPath = `/assets/${resource.type}.${resource.name}.css`;
+  const timestamp = Date.now();
+  const jsPath = `/assets/${resource.type}.${resource.name}.js?v=${timestamp}`;
+  const cssPath = `/assets/${resource.type}.${resource.name}.css?v=${timestamp}`;
 
   return `
 <!DOCTYPE html>
@@ -471,6 +542,9 @@ function generatePreviewHTML(resource: Resource, config: any): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${resource.displayName} - Preview</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <link rel="stylesheet" href="${cssPath}">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -517,6 +591,21 @@ function generatePreviewHTML(resource: Resource, config: any): string {
     const element = document.getElementById('preview-root');
     const props = ${JSON.stringify(resource.previewData)};
     module.mount(element, props);
+  </script>
+
+  <!-- Hot Reload SSE -->
+  <script>
+    const evtSource = new EventSource('/events');
+    evtSource.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      if (data.type === 'reload') {
+        console.log('🔄 Hot reload: Changes detected, reloading...');
+        window.location.reload();
+      }
+    };
+    evtSource.onerror = function() {
+      console.warn('SSE connection lost, retrying...');
+    };
   </script>
 </body>
 </html>

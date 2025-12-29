@@ -416,7 +416,6 @@ export default function Hero({ content }: HeroProps) {
       const indexFile = `import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import Hero from './Hero';
-import './index.css';
 
 interface BlockContext {
   root: Root;

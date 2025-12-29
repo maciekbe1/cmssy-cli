@@ -177,7 +177,7 @@ async function buildResource(
     minify: config.build?.minify ?? true,
     sourcemap: config.build?.sourcemap ?? true,
     target: "es2020",
-    external: [],
+    external: ["*.css"],
   });
 
   // Process CSS with PostCSS if exists
@@ -193,10 +193,11 @@ async function buildResource(
       try {
         execSync(
           `npx postcss "${cssPath}" -o "${outCssFile}"${config.build?.minify ? " --no-map" : ""}`,
-          { stdio: "ignore", cwd: process.cwd() }
+          { stdio: "pipe", cwd: process.cwd() }
         );
-      } catch (error) {
-        console.warn(chalk.yellow(`Warning: PostCSS processing failed, copying CSS as-is`));
+      } catch (error: any) {
+        console.warn(chalk.yellow(`Warning: PostCSS processing failed: ${error.message}`));
+        console.log(chalk.gray("Copying CSS as-is..."));
         fs.copyFileSync(cssPath, outCssFile);
       }
     } else {
