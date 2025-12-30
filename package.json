@@ -1,11 +1,15 @@
 {
   "name": "cmssy-cli",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Unified CLI for building and publishing blocks to Cmssy marketplace",
   "type": "module",
   "bin": {
     "cmssy": "./dist/cli.js",
     "cmssy-cli": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/cli.js",
+    "./config": "./config.js"
   },
   "scripts": {
     "build": "tsc",

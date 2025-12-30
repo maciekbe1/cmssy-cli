@@ -4,6 +4,7 @@ import fs from "fs-extra";
 import inquirer from "inquirer";
 import ora from "ora";
 import path from "path";
+import { generateTypes } from "../utils/type-generator.js";
 
 interface InitOptions {
   framework: string;
@@ -127,7 +128,7 @@ export async function initCommand(name?: string, options?: InitOptions) {
       },
       dependencies: {},
       devDependencies: {
-        "cmssy-cli": "^0.5.0",
+        "cmssy-cli": "^0.6.0",
       },
     };
 
@@ -344,18 +345,9 @@ For more information, visit: https://cmssy.io/docs
     if (answers.framework === "react") {
       // Create React example with or without Tailwind
       const heroComponent = answers.useTailwind
-        ? `interface HeroContent {
-  heading?: string;
-  subheading?: string;
-  ctaText?: string;
-  ctaUrl?: string;
-}
+        ? `import { BlockContent } from './block';
 
-interface HeroProps {
-  content: HeroContent;
-}
-
-export default function Hero({ content }: HeroProps) {
+export default function Hero({ content }: { content: BlockContent }) {
   const {
     heading = 'Welcome to Cmssy',
     subheading = 'Build reusable UI blocks with any framework',
@@ -379,18 +371,9 @@ export default function Hero({ content }: HeroProps) {
   );
 }
 `
-        : `interface HeroContent {
-  heading?: string;
-  subheading?: string;
-  ctaText?: string;
-  ctaUrl?: string;
-}
+        : `import { BlockContent } from './block';
 
-interface HeroProps {
-  content: HeroContent;
-}
-
-export default function Hero({ content }: HeroProps) {
+export default function Hero({ content }: { content: BlockContent }) {
   const {
     heading = 'Welcome to Cmssy',
     subheading = 'Build reusable UI blocks with any framework',
@@ -485,7 +468,7 @@ export default {
 `;
     fs.writeFileSync(path.join(exampleBlockPath, "src", "index.css"), cssFile);
 
-    // Create package.json for block
+    // Create minimal package.json for block
     const blockPackageJson = {
       name: `@${answers.projectName}/blocks.hero`,
       version: "1.0.0",
@@ -494,53 +477,53 @@ export default {
         name: answers.authorName,
         email: answers.authorEmail,
       },
-      cmssy: {
-        packageType: "block",
-        displayName: "Hero Section",
-        category: "marketing",
-        tags: ["hero", "landing", "cta"],
-        pricing: {
-          licenseType: "free",
-        },
-        schemaFields: [
-          {
-            key: "heading",
-            type: "text",
-            label: "Main Heading",
-            required: true,
-            placeholder: "Welcome to Cmssy",
-          },
-          {
-            key: "subheading",
-            type: "text",
-            label: "Subheading",
-            placeholder: "Build reusable UI blocks",
-          },
-          {
-            key: "ctaText",
-            type: "string",
-            label: "CTA Button Text",
-            placeholder: "Get Started",
-          },
-          {
-            key: "ctaUrl",
-            type: "link",
-            label: "CTA Button URL",
-            placeholder: "#",
-          },
-        ],
-        defaultContent: {
-          heading: "Welcome to Cmssy",
-          subheading: "Build reusable UI blocks with any framework",
-          ctaText: "Get Started",
-          ctaUrl: "#",
-        },
-      },
     };
 
     fs.writeFileSync(
       path.join(exampleBlockPath, "package.json"),
       JSON.stringify(blockPackageJson, null, 2) + "\n"
+    );
+
+    // Create block.config.ts
+    const blockConfigContent = `import { defineBlock } from 'cmssy-cli/config';
+
+export default defineBlock({
+  name: 'Hero Section',
+  description: 'Hero section block with heading and CTA button',
+  category: 'marketing',
+  tags: ['hero', 'landing', 'cta'],
+
+  schema: {
+    heading: {
+      type: 'singleLine',
+      label: 'Main Heading',
+      required: true,
+      defaultValue: 'Welcome to Cmssy',
+    },
+    subheading: {
+      type: 'singleLine',
+      label: 'Subheading',
+      defaultValue: 'Build reusable UI blocks with any framework',
+    },
+    ctaText: {
+      type: 'singleLine',
+      label: 'CTA Button Text',
+      defaultValue: 'Get Started',
+    },
+    ctaUrl: {
+      type: 'link',
+      label: 'CTA Button URL',
+      defaultValue: '#',
+    },
+  },
+
+  pricing: { licenseType: 'free' },
+});
+`;
+
+    fs.writeFileSync(
+      path.join(exampleBlockPath, "block.config.ts"),
+      blockConfigContent
     );
 
     // Create preview.json for dev server
@@ -555,6 +538,33 @@ export default {
       path.join(exampleBlockPath, "preview.json"),
       JSON.stringify(previewData, null, 2) + "\n"
     );
+
+    // Generate types for hero block
+    const heroSchema = {
+      heading: {
+        type: "singleLine" as const,
+        label: "Main Heading",
+        required: true,
+        defaultValue: "Welcome to Cmssy",
+      },
+      subheading: {
+        type: "singleLine" as const,
+        label: "Subheading",
+        defaultValue: "Build reusable UI blocks with any framework",
+      },
+      ctaText: {
+        type: "singleLine" as const,
+        label: "CTA Button Text",
+        defaultValue: "Get Started",
+      },
+      ctaUrl: {
+        type: "link" as const,
+        label: "CTA Button URL",
+        defaultValue: "#",
+      },
+    };
+
+    await generateTypes(exampleBlockPath, heroSchema);
 
     spinner.succeed("Example hero block created");
 

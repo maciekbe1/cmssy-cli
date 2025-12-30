@@ -4,6 +4,7 @@ import inquirer from "inquirer";
 import ora from "ora";
 import path from "path";
 import { loadConfig } from "../utils/cmssy-config.js";
+import { generateTypes } from "../utils/type-generator.js";
 
 async function createBlock(name: string) {
   const spinner = ora("Creating block...").start();
@@ -67,7 +68,9 @@ async function createBlock(name: string) {
     // Create component file based on framework
     if (config.framework === "react") {
       const componentName = answers.displayName.replace(/\s+/g, "");
-      const componentFile = `export default function ${componentName}({ content }) {
+      const componentFile = `import { BlockContent } from './block';
+
+export default function ${componentName}({ content }: { content: BlockContent }) {
   const {
     heading = 'Heading',
     description = 'Description',
@@ -88,18 +91,22 @@ async function createBlock(name: string) {
 
       // Create index file with mount/unmount
       const indexFile = `import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, Root } from 'react-dom/client';
 import ${componentName} from './${componentName}';
 import './index.css';
 
+interface BlockContext {
+  root: Root;
+}
+
 export default {
-  mount(element, props) {
+  mount(element: HTMLElement, props: any): BlockContext {
     const root = createRoot(element);
     root.render(<${componentName} content={props} />);
     return { root };
   },
 
-  unmount(_element, ctx) {
+  unmount(_element: HTMLElement, ctx: BlockContext): void {
     ctx.root.unmount();
   }
 };
@@ -124,45 +131,50 @@ export default {
 `;
     fs.writeFileSync(path.join(blockPath, "src", "index.css"), cssFile);
 
-    // Create package.json
+    // Create minimal package.json
     const packageJson = {
       name: `@${config.projectName || "vendor"}/blocks.${name}`,
       version: "1.0.0",
       description: answers.description,
       author: config.author,
-      cmssy: {
-        packageType: "block",
-        displayName: answers.displayName,
-        category: answers.category,
-        tags: answers.tags,
-        pricing: {
-          licenseType: "free",
-        },
-        schemaFields: [
-          {
-            key: "heading",
-            type: "text",
-            label: "Heading",
-            required: true,
-            placeholder: "Enter heading",
-          },
-          {
-            key: "description",
-            type: "text",
-            label: "Description",
-            placeholder: "Enter description",
-          },
-        ],
-        defaultContent: {
-          heading: "Heading",
-          description: "Description",
-        },
-      },
     };
 
     fs.writeFileSync(
       path.join(blockPath, "package.json"),
       JSON.stringify(packageJson, null, 2) + "\n"
+    );
+
+    // Create block.config.ts
+    const blockConfigContent = `import { defineBlock } from 'cmssy-cli/config';
+
+export default defineBlock({
+  name: '${answers.displayName}',
+  description: '${answers.description}',
+  category: '${answers.category}',
+  tags: ${JSON.stringify(answers.tags)},
+
+  schema: {
+    heading: {
+      type: 'singleLine',
+      label: 'Heading',
+      required: true,
+      defaultValue: 'Heading',
+    },
+    description: {
+      type: 'multiLine',
+      label: 'Description',
+      placeholder: 'Enter description',
+      defaultValue: 'Description',
+    },
+  },
+
+  pricing: { licenseType: 'free' },
+});
+`;
+
+    fs.writeFileSync(
+      path.join(blockPath, "block.config.ts"),
+      blockConfigContent
     );
 
     // Create preview.json
@@ -176,10 +188,28 @@ export default {
       JSON.stringify(previewData, null, 2) + "\n"
     );
 
+    // Generate initial types
+    const initialSchema = {
+      heading: {
+        type: "singleLine" as const,
+        label: "Heading",
+        required: true,
+        defaultValue: "Heading",
+      },
+      description: {
+        type: "multiLine" as const,
+        label: "Description",
+        placeholder: "Enter description",
+        defaultValue: "Description",
+      },
+    };
+
+    await generateTypes(blockPath, initialSchema);
+
     spinner.succeed(`Block "${name}" created successfully`);
     console.log(chalk.cyan("\nNext steps:\n"));
-    console.log(chalk.white("  npm run dev       # Preview your block"));
-    console.log(chalk.white("  npm run build     # Build your block\n"));
+    console.log(chalk.white("  cmssy dev         # Preview your block"));
+    console.log(chalk.white("  cmssy build       # Build your block\n"));
   } catch (error) {
     spinner.fail("Failed to create block");
     console.error(chalk.red("Error:"), error);
@@ -218,7 +248,9 @@ async function createPage(name: string) {
 
     if (config.framework === "react") {
       const componentName = answers.displayName.replace(/\s+/g, "");
-      const componentFile = `export default function ${componentName}({ content }) {
+      const componentFile = `import { BlockContent } from './block';
+
+export default function ${componentName}({ content }: { content: BlockContent }) {
   const {
     title = 'Page Title',
     sections = [],
@@ -246,18 +278,22 @@ async function createPage(name: string) {
       );
 
       const indexFile = `import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, Root } from 'react-dom/client';
 import ${componentName} from './${componentName}';
 import './index.css';
 
+interface BlockContext {
+  root: Root;
+}
+
 export default {
-  mount(element, props) {
+  mount(element: HTMLElement, props: any): BlockContext {
     const root = createRoot(element);
     root.render(<${componentName} content={props} />);
     return { root };
   },
 
-  unmount(_element, ctx) {
+  unmount(_element: HTMLElement, ctx: BlockContext): void {
     ctx.root.unmount();
   }
 };
@@ -289,45 +325,50 @@ export default {
 `;
     fs.writeFileSync(path.join(pagePath, "src", "index.css"), cssFile);
 
+    // Create minimal package.json
     const packageJson = {
       name: `@${config.projectName || "vendor"}/templates.${name}`,
       version: "1.0.0",
       description: answers.description,
       author: config.author,
-      cmssy: {
-        packageType: "template",
-        displayName: answers.displayName,
-        category: "pages",
-        pricing: {
-          licenseType: "free",
-        },
-        schemaFields: [
-          {
-            key: "title",
-            type: "text",
-            label: "Page Title",
-            required: true,
-            placeholder: "Enter page title",
-          },
-          {
-            key: "sections",
-            type: "array",
-            label: "Page Sections",
-            itemSchema: {
-              type: "object",
-            },
-          },
-        ],
-        defaultContent: {
-          title: "Page Title",
-          sections: [],
-        },
-      },
     };
 
     fs.writeFileSync(
       path.join(pagePath, "package.json"),
       JSON.stringify(packageJson, null, 2) + "\n"
+    );
+
+    // Create block.config.ts (using defineTemplate)
+    const blockConfigContent = `import { defineTemplate } from 'cmssy-cli/config';
+
+export default defineTemplate({
+  name: '${answers.displayName}',
+  description: '${answers.description}',
+  category: 'pages',
+
+  schema: {
+    title: {
+      type: 'singleLine',
+      label: 'Page Title',
+      required: true,
+      defaultValue: 'Page Title',
+    },
+    sections: {
+      type: 'repeater',
+      label: 'Page Sections',
+      schema: {
+        // Define section fields here
+      },
+    },
+  },
+
+  pricing: { licenseType: 'free' },
+});
+`;
+
+    fs.writeFileSync(
+      path.join(pagePath, "block.config.ts"),
+      blockConfigContent
     );
 
     const previewData = {
@@ -340,10 +381,27 @@ export default {
       JSON.stringify(previewData, null, 2) + "\n"
     );
 
+    // Generate initial types
+    const initialSchema = {
+      title: {
+        type: "singleLine" as const,
+        label: "Page Title",
+        required: true,
+        defaultValue: "Page Title",
+      },
+      sections: {
+        type: "repeater" as const,
+        label: "Page Sections",
+        schema: {},
+      },
+    };
+
+    await generateTypes(pagePath, initialSchema);
+
     spinner.succeed(`Page template "${name}" created successfully`);
     console.log(chalk.cyan("\nNext steps:\n"));
-    console.log(chalk.white("  npm run dev       # Preview your page"));
-    console.log(chalk.white("  npm run build     # Build your page\n"));
+    console.log(chalk.white("  cmssy dev         # Preview your page"));
+    console.log(chalk.white("  cmssy build       # Build your page\n"));
   } catch (error) {
     spinner.fail("Failed to create page template");
     console.error(chalk.red("Error:"), error);

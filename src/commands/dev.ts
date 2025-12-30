@@ -7,6 +7,13 @@ import fs from "fs-extra";
 import ora from "ora";
 import path from "path";
 import { getPackageJson, loadConfig } from "../utils/cmssy-config.js";
+import {
+  loadBlockConfig,
+  validateSchema,
+  generatePackageJsonMetadata,
+} from "../utils/block-config.js";
+import { generateTypes } from "../utils/type-generator.js";
+import { ResourceConfig } from "../types/block-config.js";
 
 interface DevOptions {
   port: string;
@@ -20,6 +27,8 @@ interface Resource {
   description?: string;
   category?: string;
   previewData: any;
+  blockConfig?: ResourceConfig;
+  packageJson?: any;
 }
 
 export async function devCommand(options: DevOptions) {
@@ -187,23 +196,57 @@ async function scanResources(): Promise<Resource[]> {
 
     for (const blockName of blockDirs) {
       const blockPath = path.join(blocksDir, blockName);
-      const pkg = getPackageJson(blockPath);
 
-      if (!pkg || !pkg.cmssy) continue;
+      // Try loading block.config.ts
+      const blockConfig = await loadBlockConfig(blockPath);
+
+      if (!blockConfig) {
+        // Check if package.json has cmssy (old format)
+        const pkg = getPackageJson(blockPath);
+        if (pkg && pkg.cmssy) {
+          console.warn(
+            chalk.yellow(
+              `Warning: Block "${blockName}" uses legacy package.json format. Run: cmssy migrate ${blockName}`
+            )
+          );
+        }
+        continue;
+      }
+
+      // Validate schema
+      const validation = await validateSchema(blockConfig.schema, blockPath);
+      if (!validation.valid) {
+        console.warn(chalk.yellow(`\nValidation warnings in ${blockName}:`));
+        validation.errors.forEach((err) => console.warn(chalk.yellow(`  - ${err}`)));
+        continue;
+      }
+
+      // Load package.json for name and version
+      const pkg = getPackageJson(blockPath);
+      if (!pkg || !pkg.name || !pkg.version) {
+        console.warn(
+          chalk.yellow(
+            `Warning: Block "${blockName}" must have package.json with name and version`
+          )
+        );
+        continue;
+      }
 
       const previewPath = path.join(blockPath, "preview.json");
       const previewData = fs.existsSync(previewPath)
         ? fs.readJsonSync(previewPath)
-        : pkg.cmssy.defaultContent || {};
+        : {};
 
       resources.push({
         type: "block",
         name: blockName,
         path: blockPath,
-        displayName: pkg.cmssy.displayName || blockName,
-        description: pkg.description,
-        category: pkg.cmssy.category,
+        displayName: blockConfig.name || blockName,
+        description: blockConfig.description || pkg.description,
+        category: blockConfig.category,
         previewData,
+        blockConfig,
+        packageJson: pkg,
       });
     }
   }
@@ -218,23 +261,57 @@ async function scanResources(): Promise<Resource[]> {
 
     for (const templateName of templateDirs) {
       const templatePath = path.join(templatesDir, templateName);
-      const pkg = getPackageJson(templatePath);
 
-      if (!pkg || !pkg.cmssy) continue;
+      // Try loading block.config.ts
+      const blockConfig = await loadBlockConfig(templatePath);
+
+      if (!blockConfig) {
+        // Check if package.json has cmssy (old format)
+        const pkg = getPackageJson(templatePath);
+        if (pkg && pkg.cmssy) {
+          console.warn(
+            chalk.yellow(
+              `Warning: Template "${templateName}" uses legacy package.json format. Run: cmssy migrate ${templateName}`
+            )
+          );
+        }
+        continue;
+      }
+
+      // Validate schema
+      const validation = await validateSchema(blockConfig.schema, templatePath);
+      if (!validation.valid) {
+        console.warn(chalk.yellow(`\nValidation warnings in ${templateName}:`));
+        validation.errors.forEach((err) => console.warn(chalk.yellow(`  - ${err}`)));
+        continue;
+      }
+
+      // Load package.json for name and version
+      const pkg = getPackageJson(templatePath);
+      if (!pkg || !pkg.name || !pkg.version) {
+        console.warn(
+          chalk.yellow(
+            `Warning: Template "${templateName}" must have package.json with name and version`
+          )
+        );
+        continue;
+      }
 
       const previewPath = path.join(templatePath, "preview.json");
       const previewData = fs.existsSync(previewPath)
         ? fs.readJsonSync(previewPath)
-        : pkg.cmssy.defaultContent || {};
+        : {};
 
       resources.push({
         type: "template",
         name: templateName,
         path: templatePath,
-        displayName: pkg.cmssy.displayName || templateName,
-        description: pkg.description,
-        category: pkg.cmssy.category,
+        displayName: blockConfig.name || templateName,
+        description: blockConfig.description || pkg.description,
+        category: blockConfig.category,
         previewData,
+        blockConfig,
+        packageJson: pkg,
       });
     }
   }
@@ -348,6 +425,11 @@ function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
   watcher.on("change", async (filepath) => {
     console.log(chalk.yellow(`\n📝 File changed: ${filepath}`));
 
+    // Check if it's a block.config.ts file
+    if (filepath.endsWith("block.config.ts")) {
+      console.log(chalk.blue(`⚙️  Configuration changed, reloading and regenerating types...`));
+    }
+
     // Extract resource name from path (e.g., "blocks/hero/src/Hero.tsx" -> "hero")
     const pathParts = filepath.split(path.sep);
     const blockOrTemplateIndex = pathParts.indexOf("blocks") !== -1
@@ -360,6 +442,21 @@ function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
     const resource = resources.find((r) => r.name === resourceName);
 
     if (resource) {
+      // Reload block.config.ts if it changed
+      if (filepath.endsWith("block.config.ts")) {
+        const blockConfig = await loadBlockConfig(resource.path);
+        if (blockConfig) {
+          resource.blockConfig = blockConfig;
+          resource.displayName = blockConfig.name || resource.name;
+          resource.description = blockConfig.description;
+          resource.category = blockConfig.category;
+
+          // Regenerate types
+          await generateTypes(resource.path, blockConfig.schema);
+          console.log(chalk.green(`✓ Types regenerated for ${resource.name}`));
+        }
+      }
+
       console.log(chalk.blue(`♻  Rebuilding ${resource.name}...`));
       await buildResource(resource, config, devDir);
       console.log(chalk.green(`✓ ${resource.name} rebuilt\n`));

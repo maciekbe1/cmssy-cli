@@ -8,6 +8,7 @@ import { deployCommand } from "./commands/deploy.js";
 import { devCommand } from "./commands/dev.js";
 import { initCommand } from "./commands/init.js";
 import { syncCommand } from "./commands/sync.js";
+import { migrateCommand } from "./commands/migrate.js";
 
 const program = new Command();
 
@@ -16,7 +17,7 @@ program
   .description(
     "Unified CLI for building and publishing blocks to Cmssy marketplace"
   )
-  .version("0.5.1");
+  .version("0.6.0");
 
 // cmssy init
 program
@@ -85,5 +86,11 @@ program
   .argument("[package]", "Package slug to sync (e.g., @vendor/blocks.hero)")
   .option("--workspace <id>", "Workspace ID to sync from")
   .action(syncCommand);
+
+// cmssy migrate
+program
+  .command("migrate [block-name]")
+  .description("Migrate from package.json cmssy section to block.config.ts")
+  .action(migrateCommand);
 
 program.parse();

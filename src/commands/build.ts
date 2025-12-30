@@ -5,6 +5,13 @@ import fs from "fs-extra";
 import ora from "ora";
 import path from "path";
 import { getPackageJson, loadConfig } from "../utils/cmssy-config.js";
+import {
+  loadBlockConfig,
+  validateSchema,
+  generatePackageJsonMetadata,
+} from "../utils/block-config.js";
+import { generateTypes } from "../utils/type-generator.js";
+import { ResourceConfig } from "../types/block-config.js";
 
 interface BuildOptions {
   framework?: string;
@@ -15,6 +22,7 @@ interface Resource {
   name: string;
   path: string;
   packageJson: any;
+  blockConfig?: ResourceConfig;
 }
 
 export async function buildCommand(options: BuildOptions) {
@@ -88,15 +96,44 @@ async function scanResources(): Promise<Resource[]> {
 
     for (const blockName of blockDirs) {
       const blockPath = path.join(blocksDir, blockName);
-      const pkg = getPackageJson(blockPath);
 
-      if (!pkg || !pkg.cmssy) {
+      // Try loading block.config.ts
+      const blockConfig = await loadBlockConfig(blockPath);
+
+      if (!blockConfig) {
+        // Check if package.json has cmssy (old format)
+        const pkg = getPackageJson(blockPath);
+        if (pkg && pkg.cmssy) {
+          throw new Error(
+            `Block "${blockName}" uses legacy package.json format.\n` +
+              `Please migrate to block.config.ts.\n` +
+              `Run: cmssy migrate ${blockName}\n` +
+              `Or see migration guide: https://cmssy.io/docs/migration`
+          );
+        }
+
         console.warn(
           chalk.yellow(
-            `Warning: Skipping ${blockName} - no cmssy metadata`
+            `Warning: Skipping ${blockName} - no block.config.ts found`
           )
         );
         continue;
+      }
+
+      // Validate schema
+      const validation = await validateSchema(blockConfig.schema, blockPath);
+      if (!validation.valid) {
+        console.error(chalk.red(`\nValidation errors in ${blockName}:`));
+        validation.errors.forEach((err) => console.error(chalk.red(`  - ${err}`)));
+        throw new Error(`Schema validation failed for ${blockName}`);
+      }
+
+      // Load package.json for name and version
+      const pkg = getPackageJson(blockPath);
+      if (!pkg || !pkg.name || !pkg.version) {
+        throw new Error(
+          `Block "${blockName}" must have package.json with name and version`
+        );
       }
 
       resources.push({
@@ -104,6 +141,7 @@ async function scanResources(): Promise<Resource[]> {
         name: blockName,
         path: blockPath,
         packageJson: pkg,
+        blockConfig,
       });
     }
   }
@@ -118,15 +156,44 @@ async function scanResources(): Promise<Resource[]> {
 
     for (const templateName of templateDirs) {
       const templatePath = path.join(templatesDir, templateName);
-      const pkg = getPackageJson(templatePath);
 
-      if (!pkg || !pkg.cmssy) {
+      // Try loading block.config.ts
+      const blockConfig = await loadBlockConfig(templatePath);
+
+      if (!blockConfig) {
+        // Check if package.json has cmssy (old format)
+        const pkg = getPackageJson(templatePath);
+        if (pkg && pkg.cmssy) {
+          throw new Error(
+            `Template "${templateName}" uses legacy package.json format.\n` +
+              `Please migrate to block.config.ts.\n` +
+              `Run: cmssy migrate ${templateName}\n` +
+              `Or see migration guide: https://cmssy.io/docs/migration`
+          );
+        }
+
         console.warn(
           chalk.yellow(
-            `Warning: Skipping ${templateName} - no cmssy metadata`
+            `Warning: Skipping ${templateName} - no block.config.ts found`
           )
         );
         continue;
+      }
+
+      // Validate schema
+      const validation = await validateSchema(blockConfig.schema, templatePath);
+      if (!validation.valid) {
+        console.error(chalk.red(`\nValidation errors in ${templateName}:`));
+        validation.errors.forEach((err) => console.error(chalk.red(`  - ${err}`)));
+        throw new Error(`Schema validation failed for ${templateName}`);
+      }
+
+      // Load package.json for name and version
+      const pkg = getPackageJson(templatePath);
+      if (!pkg || !pkg.name || !pkg.version) {
+        throw new Error(
+          `Template "${templateName}" must have package.json with name and version`
+        );
       }
 
       resources.push({
@@ -134,6 +201,7 @@ async function scanResources(): Promise<Resource[]> {
         name: templateName,
         path: templatePath,
         packageJson: pkg,
+        blockConfig,
       });
     }
   }
@@ -206,9 +274,30 @@ async function buildResource(
     }
   }
 
-  // Copy package.json for metadata
-  fs.copyFileSync(
-    path.join(resource.path, "package.json"),
-    path.join(destDir, "package.json")
-  );
+  // Generate package.json with cmssy metadata from block.config.ts
+  if (resource.blockConfig) {
+    const cmssyMetadata = generatePackageJsonMetadata(
+      resource.blockConfig,
+      resource.type
+    );
+
+    const outputPackageJson = {
+      ...resource.packageJson,
+      cmssy: cmssyMetadata,
+    };
+
+    fs.writeFileSync(
+      path.join(destDir, "package.json"),
+      JSON.stringify(outputPackageJson, null, 2) + "\n"
+    );
+
+    // Generate TypeScript types
+    await generateTypes(resource.path, resource.blockConfig.schema);
+  } else {
+    // Fallback: copy package.json as-is (shouldn't happen after migration)
+    fs.copyFileSync(
+      path.join(resource.path, "package.json"),
+      path.join(destDir, "package.json")
+    );
+  }
 }
