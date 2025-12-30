@@ -6,6 +6,7 @@ import express from "express";
 import fs from "fs-extra";
 import ora from "ora";
 import path from "path";
+import { fileURLToPath } from "url";
 import { getPackageJson, loadConfig } from "../utils/cmssy-config.js";
 import {
   loadBlockConfig,
@@ -54,6 +55,7 @@ export async function devCommand(options: DevOptions) {
 
     // Create Express server
     const app = express();
+    app.use(express.json()); // Parse JSON bodies
 
     // SSE clients for hot reload
     const sseClients: any[] = [];
@@ -81,7 +83,68 @@ export async function devCommand(options: DevOptions) {
       express.static(path.join(process.cwd(), ".cmssy", "dev"))
     );
 
-    // API endpoint to list resources
+    // Serve dev UI static files
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const devUiPath = path.join(__dirname, "../dev-ui");
+    app.use("/dev-ui", express.static(devUiPath));
+
+    // API: Get all blocks with schema
+    app.get("/api/blocks", (_req, res) => {
+      const blockList = resources.map((r) => ({
+        type: r.type,
+        name: r.name,
+        displayName: r.displayName,
+        description: r.description,
+        category: r.category,
+        schema: r.blockConfig?.schema || {},
+      }));
+      res.json(blockList);
+    });
+
+    // API: Get preview data for a block
+    app.get("/api/preview/:blockName", (req, res) => {
+      const { blockName } = req.params;
+      const resource = resources.find((r) => r.name === blockName);
+
+      if (!resource) {
+        res.status(404).json({ error: "Block not found" });
+        return;
+      }
+
+      res.json(resource.previewData);
+    });
+
+    // API: Save preview data for a block
+    app.post("/api/preview/:blockName", (req, res) => {
+      const { blockName } = req.params;
+      const newPreviewData = req.body;
+
+      const resource = resources.find((r) => r.name === blockName);
+
+      if (!resource) {
+        res.status(404).json({ error: "Block not found" });
+        return;
+      }
+
+      // Update in-memory preview data
+      resource.previewData = newPreviewData;
+
+      // Save to preview.json
+      const previewPath = path.join(resource.path, "preview.json");
+      try {
+        fs.writeJsonSync(previewPath, newPreviewData, { spaces: 2 });
+
+        // NO SSE reload for preview.json changes - UI handles updates via postMessage
+        // SSE reload is only for source code changes (handled by watcher)
+
+        res.json({ success: true });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // API endpoint to list resources (legacy)
     app.get("/api/resources", (_req, res) => {
       const resourceList = resources.map((r) => ({
         type: r.type,
@@ -93,12 +156,10 @@ export async function devCommand(options: DevOptions) {
       res.json(resourceList);
     });
 
-    // Preview page for a specific resource
-    app.get("/preview/:type/:name", async (req, res) => {
-      const { type, name } = req.params;
-      const resource = resources.find(
-        (r) => r.type === type && r.name === name
-      );
+    // Preview page for a specific resource (simplified route)
+    app.get("/preview/:name", async (req, res) => {
+      const { name } = req.params;
+      const resource = resources.find((r) => r.name === name);
 
       if (!resource) {
         res.status(404).send("Resource not found");
@@ -109,10 +170,24 @@ export async function devCommand(options: DevOptions) {
       res.send(html);
     });
 
-    // Home page with resource list
-    app.get("/", (_req, res) => {
-      const html = generateIndexHTML(resources);
+    // Legacy preview route
+    app.get("/preview/:type/:name", async (req, res) => {
+      const { name } = req.params;
+      const resource = resources.find((r) => r.name === name);
+
+      if (!resource) {
+        res.status(404).send("Resource not found");
+        return;
+      }
+
+      const html = generatePreviewHTML(resource, config);
       res.send(html);
+    });
+
+    // Home page - Serve interactive UI
+    app.get("/", (_req, res) => {
+      const indexPath = path.join(devUiPath, "index.html");
+      res.sendFile(indexPath);
     });
 
     // Start server
@@ -411,6 +486,12 @@ function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
   const watcher = chokidar.watch(watchPaths, {
     persistent: true,
     ignoreInitial: true,
+    ignored: [
+      '**/preview.json', // Ignore preview.json changes (handled via postMessage)
+      '**/.cmssy/**',
+      '**/node_modules/**',
+      '**/.git/**',
+    ],
     awaitWriteFinish: {
       stabilityThreshold: 100,
       pollInterval: 100,
@@ -424,6 +505,12 @@ function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
 
   watcher.on("change", async (filepath) => {
     console.log(chalk.yellow(`\n📝 File changed: ${filepath}`));
+
+    // IGNORE preview.json changes - handled via postMessage for instant updates
+    if (filepath.endsWith("preview.json")) {
+      console.log(chalk.gray(`   Skipping preview.json (props updated via UI)`));
+      return;
+    }
 
     // Check if it's a block.config.ts file
     if (filepath.endsWith("block.config.ts")) {
@@ -677,7 +764,7 @@ function generatePreviewHTML(resource: Resource, config: any): string {
 <body>
   <div class="preview-header">
     <div class="preview-title">${resource.displayName}</div>
-    <a href="/" class="preview-back">← Back to Home</a>
+    <a href="/" class="preview-back" target="_parent">← Back to Home</a>
   </div>
   <div class="preview-container">
     <div id="preview-root"></div>
@@ -686,17 +773,36 @@ function generatePreviewHTML(resource: Resource, config: any): string {
   <script type="module">
     import module from '${jsPath}';
     const element = document.getElementById('preview-root');
-    const props = ${JSON.stringify(resource.previewData)};
-    module.mount(element, props);
+    let props = ${JSON.stringify(resource.previewData)};
+    let context = module.mount(element, props);
+
+    // Listen for prop updates from parent (no reload, just re-render)
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'UPDATE_PROPS') {
+        console.log('⚡ Hot update: Props changed');
+        props = event.data.props;
+
+        // Use update method if available (no unmount = no blink!)
+        if (module.update && context) {
+          module.update(element, props, context);
+        } else {
+          // Fallback: unmount and remount (causes blink)
+          if (context && module.unmount) {
+            module.unmount(element, context);
+          }
+          context = module.mount(element, props);
+        }
+      }
+    });
   </script>
 
-  <!-- Hot Reload SSE -->
+  <!-- Hot Reload SSE (only for code changes) -->
   <script>
     const evtSource = new EventSource('/events');
     evtSource.onmessage = function(event) {
       const data = JSON.parse(event.data);
       if (data.type === 'reload') {
-        console.log('🔄 Hot reload: Changes detected, reloading...');
+        console.log('🔄 Hot reload: Code changed, reloading...');
         window.location.reload();
       }
     };

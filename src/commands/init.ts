@@ -123,13 +123,11 @@ export async function initCommand(name?: string, options?: InitOptions) {
       version: "1.0.0",
       type: "module",
       scripts: {
-        dev: "cmssy dev -p 3000",
+        dev: "cmssy dev",
         build: "cmssy build",
       },
       dependencies: {},
-      devDependencies: {
-        "cmssy-cli": "^0.6.0",
-      },
+      devDependencies: {},
     };
 
     // Add Tailwind CSS v4 if selected
@@ -180,6 +178,9 @@ export async function initCommand(name?: string, options?: InitOptions) {
           esModuleInterop: true,
           allowSyntheticDefaultImports: true,
           forceConsistentCasingInFileNames: true,
+          paths: {
+            "cmssy-cli/config": ["./node_modules/cmssy-cli/config"],
+          },
         },
         include: ["blocks/**/*", "templates/**/*"],
         exclude: ["node_modules", "dist", "public"],
@@ -236,11 +237,11 @@ Cmssy project for building reusable UI blocks and templates.
 # Install dependencies
 npm install
 
-# Start development server with hot reload (http://localhost:3000)
+# Start development server with hot reload (defaults to http://localhost:3000)
 npm run dev
 
 # Or specify a custom port
-npm run dev -- -p 3002
+cmssy dev -p 3002
 
 # Create a new block
 cmssy create block my-block
@@ -412,6 +413,11 @@ export default {
     const root = createRoot(element);
     root.render(<Hero content={props} />);
     return { root };
+  },
+
+  update(_element: HTMLElement, props: any, ctx: BlockContext): void {
+    // Re-render with new props (no unmount = no blink!)
+    ctx.root.render(<Hero content={props} />);
   },
 
   unmount(_element: HTMLElement, ctx: BlockContext): void {

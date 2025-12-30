@@ -106,6 +106,11 @@ export default {
     return { root };
   },
 
+  update(_element: HTMLElement, props: any, ctx: BlockContext): void {
+    // Re-render with new props (no unmount = no blink!)
+    ctx.root.render(<${componentName} content={props} />);
+  },
+
   unmount(_element: HTMLElement, ctx: BlockContext): void {
     ctx.root.unmount();
   }
@@ -291,6 +296,11 @@ export default {
     const root = createRoot(element);
     root.render(<${componentName} content={props} />);
     return { root };
+  },
+
+  update(_element: HTMLElement, props: any, ctx: BlockContext): void {
+    // Re-render with new props (no unmount = no blink!)
+    ctx.root.render(<${componentName} content={props} />);
   },
 
   unmount(_element: HTMLElement, ctx: BlockContext): void {
