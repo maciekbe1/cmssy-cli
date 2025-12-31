@@ -102,9 +102,6 @@ export async function initCommand(name?: string, options?: InitOptions) {
         name: answers.authorName,
         email: answers.authorEmail,
       },
-      cdn: {
-        baseUrl: "",
-      },
       build: {
         outDir: "public",
         minify: true,
@@ -221,8 +218,12 @@ public/
 CMSSY_API_URL=https://api.cmssy.io/graphql
 
 # Cmssy API Token (get from Dashboard → API Tokens)
-# Required scopes: marketplace:publish
+# Required scopes: marketplace:publish (for marketplace) or workspace:write (for workspace)
 CMSSY_API_TOKEN=
+
+# Workspace ID (optional, for workspace publish)
+# Get from Dashboard → Workspace Settings
+CMSSY_WORKSPACE_ID=
 `;
     fs.writeFileSync(path.join(projectPath, ".env.example"), envExample);
 
@@ -267,31 +268,34 @@ cmssy create template <name>
 npm run build
 \`\`\`
 
-### Publishing to Cmssy Marketplace
+### Publishing
+
 \`\`\`bash
 # Configure API credentials (run once)
 cmssy configure
 
-# Deploy all blocks and templates
-cmssy deploy --all
+# MARKETPLACE PUBLISH (public, requires review)
+cmssy publish hero --marketplace                 # single block
+cmssy publish hero pricing --marketplace         # multiple blocks
+cmssy publish --all --marketplace                # all blocks/templates
+cmssy publish hero --marketplace --patch         # with version bump
 
-# Deploy specific blocks
-cmssy deploy --blocks hero pricing
+# WORKSPACE PUBLISH (private, no review)
+cmssy publish hero --workspace ws_abc123         # explicit workspace ID
+cmssy publish --all --workspace                  # uses CMSSY_WORKSPACE_ID from .env
+cmssy publish hero -w ws_abc123 --minor          # with version bump
 
-# Deploy specific templates
-cmssy deploy --templates landing
-
-# Preview what would be deployed
-cmssy deploy --all --dry-run
+# Preview what would be published
+cmssy publish --all --marketplace --dry-run
 \`\`\`
 
 ### Syncing from Marketplace
 \`\`\`bash
 # Pull a specific block from marketplace
-cmssy sync @vendor/blocks.hero --workspace YOUR_WORKSPACE_ID
+cmssy sync @vendor/blocks.hero --workspace ws_abc123
 
 # Pull all installed packages
-cmssy sync --workspace YOUR_WORKSPACE_ID
+cmssy sync --workspace ws_abc123
 \`\`\`
 
 ## Project Structure

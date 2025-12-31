@@ -8,9 +8,6 @@ export interface CmssyConfig {
     name: string;
     email: string;
   };
-  cdn?: {
-    baseUrl: string;
-  };
   build?: {
     outDir: string;
     minify: boolean;

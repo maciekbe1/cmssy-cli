@@ -5,6 +5,7 @@ import path from "path";
 export interface CmssyConfig {
   apiUrl: string;
   apiToken: string | null;
+  workspaceId?: string | null;
 }
 
 export function loadConfig(): CmssyConfig {
@@ -18,6 +19,7 @@ export function loadConfig(): CmssyConfig {
   return {
     apiUrl: process.env.CMSSY_API_URL || "https://api.cmssy.io/graphql",
     apiToken: process.env.CMSSY_API_TOKEN || null,
+    workspaceId: process.env.CMSSY_WORKSPACE_ID || null,
   };
 }
 

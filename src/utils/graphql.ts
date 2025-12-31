@@ -29,3 +29,32 @@ export const PUBLISH_PACKAGE_MUTATION = `
     }
   }
 `;
+
+export const IMPORT_BLOCK_MUTATION = `
+  mutation ImportBlock($input: ImportBlockInput!) {
+    importBlock(input: $input) {
+      id
+      blockType
+      name
+      description
+      icon
+      category
+      sourceCode
+      schemaFields {
+        key
+        type
+        label
+        defaultValue
+        placeholder
+        required
+        helperText
+        options
+        minValue
+        maxValue
+      }
+      defaultContent
+      version
+      createdAt
+    }
+  }
+`;

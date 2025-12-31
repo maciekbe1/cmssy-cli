@@ -1,6 +1,6 @@
 {
   "name": "cmssy-cli",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Unified CLI for building and publishing blocks to Cmssy marketplace",
   "type": "module",
   "bin": {
@@ -56,6 +56,7 @@
     "node-fetch": "^3.3.2",
     "ora": "^8.0.1",
     "postcss": "^8.4.49",
+    "semver": "^7.6.3",
     "tsx": "^4.21.0"
   },
   "devDependencies": {
@@ -65,6 +66,7 @@
     "@types/inquirer": "^9.0.7",
     "@types/node": "^22.10.2",
     "@types/node-fetch": "^2.6.13",
+    "@types/semver": "^7.7.1",
     "typescript": "^5.7.2"
   }
 }

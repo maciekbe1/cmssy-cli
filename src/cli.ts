@@ -4,11 +4,11 @@ import { Command } from "commander";
 import { buildCommand } from "./commands/build.js";
 import { configureCommand } from "./commands/configure.js";
 import { createCommand } from "./commands/create.js";
-import { deployCommand } from "./commands/deploy.js";
 import { devCommand } from "./commands/dev.js";
 import { initCommand } from "./commands/init.js";
 import { syncCommand } from "./commands/sync.js";
 import { migrateCommand } from "./commands/migrate.js";
+import { publishCommand } from "./commands/publish.js";
 
 const program = new Command();
 
@@ -17,7 +17,7 @@ program
   .description(
     "Unified CLI for building and publishing blocks to Cmssy marketplace"
   )
-  .version("0.7.0");
+  .version("0.8.0");
 
 // cmssy init
 program
@@ -69,15 +69,18 @@ program
   .option("--api-url <url>", "Cmssy API URL", "https://api.cmssy.io/graphql")
   .action(configureCommand);
 
-// cmssy deploy
+// cmssy publish
 program
-  .command("deploy")
-  .description("Publish blocks/templates to Cmssy marketplace")
-  .option("--all", "Deploy all blocks and templates")
-  .option("--blocks <names...>", "Deploy specific blocks")
-  .option("--templates <names...>", "Deploy specific templates")
-  .option("--dry-run", "Preview what would be deployed without publishing")
-  .action(deployCommand);
+  .command("publish [packages...]")
+  .description("Publish blocks/templates to marketplace or workspace")
+  .option("-m, --marketplace", "Publish to public marketplace (requires review)")
+  .option("-w, --workspace [id]", "Publish to workspace (private, no review)")
+  .option("--all", "Publish all blocks and templates")
+  .option("--patch", "Bump patch version (1.0.0 -> 1.0.1)")
+  .option("--minor", "Bump minor version (1.0.0 -> 1.1.0)")
+  .option("--major", "Bump major version (1.0.0 -> 2.0.0)")
+  .option("--dry-run", "Preview what would be published without uploading")
+  .action(publishCommand);
 
 // cmssy sync
 program
