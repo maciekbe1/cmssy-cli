@@ -509,6 +509,28 @@ let publishTaskId = null;
 let publishEventSource = null;
 let workspacesCache = null;
 
+// Store original progress HTML template
+const PROGRESS_TEMPLATE = `
+  <div class="publish-progress-container">
+    <div class="progress-bar-container">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="publish-progress-bar" style="width: 0%"></div>
+      </div>
+      <div class="progress-text" id="publish-progress-text">0%</div>
+    </div>
+
+    <div class="progress-steps" id="publish-steps">
+      <!-- Steps will be dynamically added here -->
+    </div>
+
+    <div style="text-align: center; margin-top: 24px;">
+      <button class="btn btn-primary" onclick="closePublishModal()" id="publish-close-btn" style="display: none;">
+        Done
+      </button>
+    </div>
+  </div>
+`;
+
 async function loadWorkspaces() {
   const select = document.getElementById('publish-workspace-id');
   const errorDiv = document.getElementById('workspace-error');
@@ -584,7 +606,29 @@ window.openPublishModal = async function() {
 window.closePublishModal = function() {
   const modal = document.getElementById('publish-modal');
   modal.classList.remove('active');
+
+  // Reset modal state
+  resetPublishModal();
 };
+
+function resetPublishModal() {
+  // Close EventSource if active
+  if (publishEventSource) {
+    publishEventSource.close();
+    publishEventSource = null;
+  }
+
+  // Reset to form view (hide progress)
+  document.getElementById('publish-form').style.display = 'block';
+  const progressDiv = document.getElementById('publish-progress');
+  progressDiv.style.display = 'none';
+
+  // Restore original progress HTML (in case showPublishError changed it)
+  progressDiv.innerHTML = PROGRESS_TEMPLATE;
+
+  // Reset task ID
+  publishTaskId = null;
+}
 
 window.toggleWorkspaceInput = function() {
   const target = document.querySelector('input[name="publish-target"]:checked').value;
