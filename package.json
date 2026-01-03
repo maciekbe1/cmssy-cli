@@ -1,6 +1,6 @@
 {
   "name": "cmssy-cli",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "description": "Unified CLI for building and publishing blocks to Cmssy marketplace",
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
     "./config": "./config.js"
   },
   "scripts": {
-    "build": "tsc && tsc config.ts --module esnext --target esnext --moduleResolution bundler && cp -r src/dev-ui dist/",
+    "build": "tsc && tsc config.ts --module esnext --target esnext --moduleResolution bundler && tsc config.ts --declaration --emitDeclarationOnly --module esnext --target esnext --moduleResolution bundler && cp -r src/dev-ui dist/",
     "dev": "tsc --watch",
     "prepare": "npm run build"
   },
@@ -35,6 +35,7 @@
   "files": [
     "dist",
     "config.js",
+    "config.d.ts",
     "README.md",
     "LICENSE"
   ],

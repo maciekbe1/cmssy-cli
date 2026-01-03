@@ -1,34 +1,26 @@
 import chalk from "chalk";
-import { exec, execSync } from "child_process";
+import { exec } from "child_process";
 import chokidar from "chokidar";
-import { build } from "esbuild";
 import express from "express";
 import fs from "fs-extra";
 import { GraphQLClient } from "graphql-request";
 import ora from "ora";
 import path from "path";
 import { fileURLToPath } from "url";
-import { ResourceConfig } from "../types/block-config.js";
+import { scanResources, ScannedResource } from "../utils/scanner.js";
+import { buildResource } from "../utils/builder.js";
 import { loadBlockConfig, validateSchema } from "../utils/block-config.js";
-import { getPackageJson, loadConfig } from "../utils/cmssy-config.js";
+import { loadConfig } from "../utils/cmssy-config.js";
 import { loadConfig as loadEnvConfig } from "../utils/config.js";
 import { generateTypes } from "../utils/type-generator.js";
+import { ResourceConfig } from "../types/block-config.js";
 
 interface DevOptions {
   port: string;
 }
 
-interface Resource {
-  type: "block" | "template";
-  name: string;
-  path: string;
-  displayName: string;
-  description?: string;
-  category?: string;
-  previewData: any;
-  blockConfig?: ResourceConfig;
-  packageJson?: any;
-}
+// Use ScannedResource from scanner
+type Resource = ScannedResource;
 
 export async function devCommand(options: DevOptions) {
   const spinner = ora("Starting development server...").start();
@@ -37,8 +29,14 @@ export async function devCommand(options: DevOptions) {
     const config = await loadConfig();
     const port = parseInt(options.port, 10);
 
-    // Scan for blocks and templates
-    const resources = await scanResources();
+    // Scan for blocks and templates (lenient mode - warnings only)
+    const resources = await scanResources({
+      strict: false,
+      loadConfig: true,
+      validateSchema: true,
+      loadPreview: true,
+      requirePackageJson: true,
+    });
 
     if (resources.length === 0) {
       spinner.warn("No blocks or templates found");
@@ -364,7 +362,7 @@ export async function devCommand(options: DevOptions) {
         blocks.forEach((block) => {
           const url = `/preview/block/${block.name}`;
           console.log(
-            chalk.white(`   ● ${block.displayName.padEnd(20)} ${url}`)
+            chalk.white(`   ● ${(block.displayName || block.name).padEnd(20)} ${url}`)
           );
         });
         console.log("");
@@ -375,7 +373,7 @@ export async function devCommand(options: DevOptions) {
         templates.forEach((template) => {
           const url = `/preview/template/${template.name}`;
           console.log(
-            chalk.white(`   ● ${template.displayName.padEnd(20)} ${url}`)
+            chalk.white(`   ● ${(template.displayName || template.name).padEnd(20)} ${url}`)
           );
         });
         console.log("");
@@ -396,218 +394,20 @@ export async function devCommand(options: DevOptions) {
   }
 }
 
-async function scanResources(): Promise<Resource[]> {
-  const resources: Resource[] = [];
-
-  // Scan blocks
-  const blocksDir = path.join(process.cwd(), "blocks");
-  if (fs.existsSync(blocksDir)) {
-    const blockDirs = fs
-      .readdirSync(blocksDir, { withFileTypes: true })
-      .filter((dirent) => dirent.isDirectory())
-      .map((dirent) => dirent.name);
-
-    for (const blockName of blockDirs) {
-      const blockPath = path.join(blocksDir, blockName);
-
-      // Try loading block.config.ts
-      const blockConfig = await loadBlockConfig(blockPath);
-
-      if (!blockConfig) {
-        // Check if package.json has cmssy (old format)
-        const pkg = getPackageJson(blockPath);
-        if (pkg && pkg.cmssy) {
-          console.warn(
-            chalk.yellow(
-              `Warning: Block "${blockName}" uses legacy package.json format. Run: cmssy migrate ${blockName}`
-            )
-          );
-        }
-        continue;
-      }
-
-      // Validate schema
-      const validation = await validateSchema(blockConfig.schema, blockPath);
-      if (!validation.valid) {
-        console.warn(chalk.yellow(`\nValidation warnings in ${blockName}:`));
-        validation.errors.forEach((err) =>
-          console.warn(chalk.yellow(`  - ${err}`))
-        );
-        continue;
-      }
-
-      // Load package.json for name and version
-      const pkg = getPackageJson(blockPath);
-      if (!pkg || !pkg.name || !pkg.version) {
-        console.warn(
-          chalk.yellow(
-            `Warning: Block "${blockName}" must have package.json with name and version`
-          )
-        );
-        continue;
-      }
-
-      const previewPath = path.join(blockPath, "preview.json");
-      const previewData = fs.existsSync(previewPath)
-        ? fs.readJsonSync(previewPath)
-        : {};
-
-      resources.push({
-        type: "block",
-        name: blockName,
-        path: blockPath,
-        displayName: blockConfig.name || blockName,
-        description: blockConfig.description || pkg.description,
-        category: blockConfig.category,
-        previewData,
-        blockConfig,
-        packageJson: pkg,
-      });
-    }
-  }
-
-  // Scan templates
-  const templatesDir = path.join(process.cwd(), "templates");
-  if (fs.existsSync(templatesDir)) {
-    const templateDirs = fs
-      .readdirSync(templatesDir, { withFileTypes: true })
-      .filter((dirent) => dirent.isDirectory())
-      .map((dirent) => dirent.name);
-
-    for (const templateName of templateDirs) {
-      const templatePath = path.join(templatesDir, templateName);
-
-      // Try loading block.config.ts
-      const blockConfig = await loadBlockConfig(templatePath);
-
-      if (!blockConfig) {
-        // Check if package.json has cmssy (old format)
-        const pkg = getPackageJson(templatePath);
-        if (pkg && pkg.cmssy) {
-          console.warn(
-            chalk.yellow(
-              `Warning: Template "${templateName}" uses legacy package.json format. Run: cmssy migrate ${templateName}`
-            )
-          );
-        }
-        continue;
-      }
-
-      // Validate schema
-      const validation = await validateSchema(blockConfig.schema, templatePath);
-      if (!validation.valid) {
-        console.warn(chalk.yellow(`\nValidation warnings in ${templateName}:`));
-        validation.errors.forEach((err) =>
-          console.warn(chalk.yellow(`  - ${err}`))
-        );
-        continue;
-      }
-
-      // Load package.json for name and version
-      const pkg = getPackageJson(templatePath);
-      if (!pkg || !pkg.name || !pkg.version) {
-        console.warn(
-          chalk.yellow(
-            `Warning: Template "${templateName}" must have package.json with name and version`
-          )
-        );
-        continue;
-      }
-
-      const previewPath = path.join(templatePath, "preview.json");
-      const previewData = fs.existsSync(previewPath)
-        ? fs.readJsonSync(previewPath)
-        : {};
-
-      resources.push({
-        type: "template",
-        name: templateName,
-        path: templatePath,
-        displayName: blockConfig.name || templateName,
-        description: blockConfig.description || pkg.description,
-        category: blockConfig.category,
-        previewData,
-        blockConfig,
-        packageJson: pkg,
-      });
-    }
-  }
-
-  return resources;
-}
-
 async function buildAllResources(resources: Resource[], config: any) {
   const devDir = path.join(process.cwd(), ".cmssy", "dev");
   fs.ensureDirSync(devDir);
 
   for (const resource of resources) {
-    await buildResource(resource, config, devDir);
-  }
-}
-
-async function buildResource(resource: Resource, config: any, outDir: string) {
-  const srcPath = path.join(resource.path, "src");
-  const entryPoint =
-    config.framework === "react"
-      ? path.join(srcPath, "index.tsx")
-      : path.join(srcPath, "index.ts");
-
-  if (!fs.existsSync(entryPoint)) {
-    console.warn(
-      chalk.yellow(`Warning: Entry point not found for ${resource.name}`)
-    );
-    return;
-  }
-
-  const outFile = path.join(outDir, `${resource.type}.${resource.name}.js`);
-
-  try {
-    await build({
-      entryPoints: [entryPoint],
-      bundle: true,
-      format: "esm",
-      outfile: outFile,
-      jsx: "transform",
+    await buildResource(resource, devDir, {
+      framework: config.framework,
       minify: false,
       sourcemap: true,
-      target: "es2020",
-      external: ["*.css"],
+      outputMode: "flat",
+      generatePackageJson: false,
+      generateTypes: false, // Types are generated during scan
+      strict: false,
     });
-
-    // Process CSS with PostCSS if exists
-    const cssPath = path.join(srcPath, "index.css");
-    if (fs.existsSync(cssPath)) {
-      const outCssFile = path.join(
-        outDir,
-        `${resource.type}.${resource.name}.css`
-      );
-
-      // Check if postcss.config.js exists (Tailwind enabled)
-      const postcssConfigPath = path.join(process.cwd(), "postcss.config.js");
-
-      if (fs.existsSync(postcssConfigPath)) {
-        // Use PostCSS to process CSS (includes Tailwind)
-        try {
-          execSync(`npx postcss "${cssPath}" -o "${outCssFile}"`, {
-            stdio: "pipe",
-            cwd: process.cwd(),
-          });
-        } catch (error: any) {
-          console.warn(
-            chalk.yellow(
-              `Warning: PostCSS processing failed for ${resource.name}: ${error.message}`
-            )
-          );
-          console.log(chalk.gray("Copying CSS as-is..."));
-          fs.copyFileSync(cssPath, outCssFile);
-        }
-      } else {
-        // No PostCSS config - just copy CSS
-        fs.copyFileSync(cssPath, outCssFile);
-      }
-    }
-  } catch (error) {
-    console.error(chalk.red(`Build error for ${resource.name}:`), error);
   }
 }
 
@@ -694,7 +494,15 @@ function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
       }
 
       console.log(chalk.blue(`♻  Rebuilding ${resource.name}...`));
-      await buildResource(resource, config, devDir);
+      await buildResource(resource, devDir, {
+        framework: config.framework,
+        minify: false,
+        sourcemap: true,
+        outputMode: "flat",
+        generatePackageJson: false,
+        generateTypes: false, // Already generated above
+        strict: false,
+      });
       console.log(chalk.green(`✓ ${resource.name} rebuilt\n`));
 
       // Notify SSE clients to reload
@@ -727,144 +535,6 @@ function setupWatcher(resources: Resource[], config: any, sseClients: any[]) {
   });
 
   return watcher;
-}
-
-function generateIndexHTML(resources: Resource[]): string {
-  const blocks = resources.filter((r) => r.type === "block");
-  const templates = resources.filter((r) => r.type === "template");
-
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cmssy Dev Server</title>
-  <style>
-    /* Only reset specific elements, NOT all */
-    body {
-      margin: 0;
-      padding: 2rem;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f5f5f5;
-      box-sizing: border-box;
-    }
-    .container { max-width: 1200px; margin: 0 auto; }
-    h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
-    .subtitle { color: #666; margin-bottom: 3rem; }
-    .section { margin-bottom: 3rem; }
-    .section-title { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
-    .card {
-      background: white;
-      border-radius: 8px;
-      padding: 1.5rem;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    .card-title { font-size: 1.25rem; margin-bottom: 0.5rem; }
-    .card-desc { color: #666; font-size: 0.9rem; margin-bottom: 1rem; }
-    .card-category {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      background: #e3f2fd;
-      color: #1976d2;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      margin-bottom: 1rem;
-    }
-    .card-link {
-      display: inline-block;
-      padding: 0.5rem 1rem;
-      background: #667eea;
-      color: white;
-      text-decoration: none;
-      border-radius: 4px;
-      font-weight: 500;
-    }
-    .card-link:hover { background: #5568d3; }
-    .empty {
-      text-align: center;
-      padding: 3rem;
-      color: #999;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🔨 Cmssy</h1>
-    <p class="subtitle">Development Server</p>
-
-    ${
-      blocks.length > 0
-        ? `
-      <div class="section">
-        <h2 class="section-title">Blocks (${blocks.length})</h2>
-        <div class="grid">
-          ${blocks
-            .map(
-              (block) => `
-            <div class="card">
-              <h3 class="card-title">${block.displayName}</h3>
-              ${
-                block.description
-                  ? `<p class="card-desc">${block.description}</p>`
-                  : ""
-              }
-              ${
-                block.category
-                  ? `<div class="card-category">${block.category}</div>`
-                  : ""
-              }
-              <a href="/preview/block/${
-                block.name
-              }" class="card-link">Preview →</a>
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `
-        : '<div class="empty">No blocks found. Create one with: <code>npx cmssy create block my-block</code></div>'
-    }
-
-    ${
-      templates.length > 0
-        ? `
-      <div class="section">
-        <h2 class="section-title">Templates (${templates.length})</h2>
-        <div class="grid">
-          ${templates
-            .map(
-              (template) => `
-            <div class="card">
-              <h3 class="card-title">${template.displayName}</h3>
-              ${
-                template.description
-                  ? `<p class="card-desc">${template.description}</p>`
-                  : ""
-              }
-              <a href="/preview/template/${
-                template.name
-              }" class="card-link">Preview →</a>
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `
-        : ""
-    }
-  </div>
-</body>
-</html>
-  `;
 }
 
 // Execute publish command asynchronously

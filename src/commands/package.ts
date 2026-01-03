@@ -4,6 +4,7 @@ import chalk from "chalk";
 import ora from "ora";
 import archiver from "archiver";
 import { loadConfig } from "../utils/cmssy-config.js";
+import { scanResources, ScannedResource } from "../utils/scanner.js";
 
 interface PackageOptions {
   all?: boolean;
@@ -34,16 +35,31 @@ export async function packageCommand(
     process.exit(1);
   }
 
-  // Scan for blocks and templates
-  const resources = await scanResources(cwd);
+  // Scan for blocks and templates (minimal mode - no validation, just package.json)
+  const scannedResources = await scanResources({
+    strict: false,
+    loadConfig: false,
+    validateSchema: false,
+    loadPreview: false,
+    requirePackageJson: true,
+    cwd,
+  });
 
-  if (resources.length === 0) {
+  if (scannedResources.length === 0) {
     console.log(chalk.yellow("⚠ No blocks or templates found"));
     return;
   }
 
+  // Map ScannedResource to local Resource interface
+  const resources = scannedResources.map((r) => ({
+    name: r.name,
+    type: r.type,
+    dir: r.path, // ScannedResource uses 'path', local uses 'dir'
+    packageJson: r.packageJson,
+  }));
+
   // Determine which packages to package
-  let toPackage: Resource[] = [];
+  let toPackage = [];
 
   if (options.all) {
     toPackage = resources;
@@ -83,52 +99,6 @@ export async function packageCommand(
       `\n✓ Successfully packaged ${toPackage.length} package(s) to ${outputDir}`
     )
   );
-}
-
-async function scanResources(cwd: string): Promise<Resource[]> {
-  const resources: Resource[] = [];
-
-  // Scan blocks
-  const blocksDir = path.join(cwd, "blocks");
-  if (await fs.pathExists(blocksDir)) {
-    const blockDirs = await fs.readdir(blocksDir);
-    for (const name of blockDirs) {
-      const blockDir = path.join(blocksDir, name);
-      const packageJsonPath = path.join(blockDir, "package.json");
-
-      if (await fs.pathExists(packageJsonPath)) {
-        const packageJson = await fs.readJson(packageJsonPath);
-        resources.push({
-          name,
-          type: "block",
-          dir: blockDir,
-          packageJson,
-        });
-      }
-    }
-  }
-
-  // Scan templates
-  const templatesDir = path.join(cwd, "templates");
-  if (await fs.pathExists(templatesDir)) {
-    const templateDirs = await fs.readdir(templatesDir);
-    for (const name of templateDirs) {
-      const templateDir = path.join(templatesDir, name);
-      const packageJsonPath = path.join(templateDir, "package.json");
-
-      if (await fs.pathExists(packageJsonPath)) {
-        const packageJson = await fs.readJson(packageJsonPath);
-        resources.push({
-          name,
-          type: "template",
-          dir: templateDir,
-          packageJson,
-        });
-      }
-    }
-  }
-
-  return resources;
 }
 
 async function packageResource(resource: Resource, outputDir: string) {

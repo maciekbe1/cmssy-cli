@@ -20,7 +20,7 @@ program
   .description(
     "Unified CLI for building and publishing blocks to Cmssy marketplace"
   )
-  .version("0.12.3");
+  .version("0.13.0");
 
 // cmssy init
 program
