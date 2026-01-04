@@ -429,10 +429,14 @@ async function bundleSourceCode(packagePath: string): Promise<string> {
     bundle: true,
     write: false,
     format: "cjs", // CommonJS format (module.exports) - compatible with SSR VM
-    platform: "node", // Node platform for CommonJS
+    platform: "browser", // Browser platform to avoid Node.js globals like 'process'
     jsx: "transform", // Transform JSX to React.createElement
     loader: { ".tsx": "tsx", ".ts": "ts", ".css": "empty" },
     external: [], // Bundle everything (React will be provided by SSR sandbox)
+    define: {
+      // Replace process.env references with static values
+      'process.env.NODE_ENV': '"production"',
+    },
   });
 
   return result.outputFiles[0].text;
