@@ -460,7 +460,9 @@ if (!OriginalComponent) {
   throw new Error('Block must export a default component');
 }
 
-export default {
+// Export both mount/update pattern AND original component for SSR
+module.exports = {
+  // Mount/update pattern for browser
   mount(element, props) {
     const root = createRoot(element);
     root.render(React.createElement(OriginalComponent, { content: props }));
@@ -473,7 +475,10 @@ export default {
 
   unmount(_element, ctx) {
     ctx.root.unmount();
-  }
+  },
+
+  // Original component for SSR (server-side rendering)
+  __component: OriginalComponent
 };
 `.trim();
 }
