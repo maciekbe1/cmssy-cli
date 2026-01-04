@@ -1,6 +1,6 @@
 import fs from "fs-extra";
-import fetch from "node-fetch";
 import path from "path";
+import { GraphQLClient } from "graphql-request";
 import { hasConfig, loadConfig } from "./config.js";
 
 export interface FieldTypeDefinition {
@@ -114,22 +114,32 @@ export async function getFieldTypes(): Promise<FieldTypeDefinition[]> {
   const cached = await loadCachedFieldTypes();
   if (cached) return cached;
 
-  // Try to fetch from backend if configured
+  // Try to fetch from backend via GraphQL if configured
   if (hasConfig()) {
     try {
       const config = loadConfig();
-      const apiBase = config.apiUrl.replace("/graphql", "");
-      const response = await fetch(`${apiBase}/api/field-types`, {
+      const client = new GraphQLClient(config.apiUrl, {
         headers: config.apiToken
           ? { Authorization: `Bearer ${config.apiToken}` }
           : {},
       });
 
-      if (response.ok) {
-        const fieldTypes = (await response.json()) as FieldTypeDefinition[];
-        await cacheFieldTypes(fieldTypes);
-        return fieldTypes;
-      }
+      const query = `
+        query GetFieldTypes {
+          fieldTypes {
+            type
+            label
+            description
+            allowsDefaultValue
+            supportsValidation
+          }
+        }
+      `;
+
+      const data: any = await client.request(query);
+      const fieldTypes = data.fieldTypes as FieldTypeDefinition[];
+      await cacheFieldTypes(fieldTypes);
+      return fieldTypes;
     } catch (error) {
       // Backend unreachable, use fallback
     }
