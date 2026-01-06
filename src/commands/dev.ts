@@ -321,32 +321,78 @@ export async function devCommand(options: DevOptions) {
     // API: Get publish progress (SSE)
     app.get("/api/publish/progress/:taskId", (req, res) => {
       const { taskId } = req.params;
+      let isClosed = false;
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
+      const safeWrite = (data: string) => {
+        if (isClosed) return false;
+        try {
+          res.write(data);
+          return true;
+        } catch (err) {
+          console.error("[SSE] Write error:", err);
+          isClosed = true;
+          return false;
+        }
+      };
+
+      const closeConnection = (interval: NodeJS.Timeout) => {
+        if (isClosed) return;
+        isClosed = true;
+        clearInterval(interval);
+        try {
+          res.end();
+        } catch (err) {
+          // Connection already closed, ignore
+        }
+      };
+
       // Send initial state
       const task = publishTasks.get(taskId);
       if (task) {
-        res.write(`data: ${JSON.stringify(task)}\n\n`);
+        safeWrite(`data: ${JSON.stringify(task)}\n\n`);
+        // Check if already done
+        if (task.status === "completed" || task.status === "failed") {
+          console.log(`[SSE] Task ${taskId} already finished, sending final state`);
+          try { res.end(); } catch (e) { /* ignore */ }
+          return;
+        }
       }
 
       // Poll for updates every 500ms
       const interval = setInterval(() => {
-        const task = publishTasks.get(taskId);
-        if (task) {
-          res.write(`data: ${JSON.stringify(task)}\n\n`);
+        if (isClosed) {
+          clearInterval(interval);
+          return;
+        }
 
-          // Close when done
-          if (task.status === "completed" || task.status === "failed") {
-            clearInterval(interval);
-            res.end();
-          }
+        const task = publishTasks.get(taskId);
+        if (!task) {
+          console.log(`[SSE] Task ${taskId} not found, closing connection`);
+          closeConnection(interval);
+          return;
+        }
+
+        console.log(`[SSE] Sending status: ${task.status} for task ${taskId}`);
+
+        if (!safeWrite(`data: ${JSON.stringify(task)}\n\n`)) {
+          closeConnection(interval);
+          return;
+        }
+
+        // Close when done
+        if (task.status === "completed" || task.status === "failed") {
+          console.log(`[SSE] Task ${taskId} finished with status: ${task.status}`);
+          closeConnection(interval);
         }
       }, 500);
 
       req.on("close", () => {
+        console.log(`[SSE] Client closed connection for task ${taskId}`);
+        isClosed = true;
         clearInterval(interval);
       });
     });
