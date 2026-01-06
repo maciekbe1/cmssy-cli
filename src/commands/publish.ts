@@ -821,6 +821,11 @@ function convertSchemaToFields(schema: Record<string, any>): any[] {
       baseField.placeholder = field.placeholder;
     }
 
+    // Add helpText if present
+    if (field.helpText) {
+      baseField.helperText = field.helpText;
+    }
+
     if (field.type === "select" && field.options) {
       baseField.options = field.options;
     }

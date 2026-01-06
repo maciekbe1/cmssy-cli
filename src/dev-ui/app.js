@@ -839,25 +839,36 @@ function streamPublishProgress(taskId) {
   // Close existing connection
   if (publishEventSource) {
     publishEventSource.close();
+    publishEventSource = null;
   }
 
   publishEventSource = new EventSource(`/api/publish/progress/${taskId}`);
 
   publishEventSource.onmessage = (event) => {
-    const task = JSON.parse(event.data);
-    updatePublishProgress(task);
+    try {
+      const task = JSON.parse(event.data);
+      updatePublishProgress(task);
 
-    // Close connection when done
-    if (task.status === 'completed' || task.status === 'failed') {
-      publishEventSource.close();
-      publishEventSource = null;
+      // Close connection when done - do this BEFORE any other processing
+      if (task.status === 'completed' || task.status === 'failed') {
+        console.log('[Publish] Task finished with status:', task.status);
+        if (publishEventSource) {
+          publishEventSource.close();
+          publishEventSource = null;
+        }
+      }
+    } catch (err) {
+      console.error('[Publish] Failed to parse SSE message:', err);
     }
   };
 
-  publishEventSource.onerror = () => {
-    console.error('SSE connection lost');
-    publishEventSource.close();
-    publishEventSource = null;
+  publishEventSource.onerror = (err) => {
+    // Only log if we haven't already closed the connection
+    if (publishEventSource) {
+      console.error('[Publish] SSE connection error');
+      publishEventSource.close();
+      publishEventSource = null;
+    }
   };
 }
 
