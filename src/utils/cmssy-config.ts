@@ -20,7 +20,7 @@ export async function loadConfig(): Promise<CmssyConfig> {
 
   if (!fs.existsSync(configPath)) {
     throw new Error(
-      "cmssy.config.js not found. Are you in a cmssy-forge project?"
+      "cmssy.config.js not found. Run 'cmssy init' to create a project."
     );
   }
 
